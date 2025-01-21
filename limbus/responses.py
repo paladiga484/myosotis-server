@@ -5,6 +5,10 @@ from limbus.formats import *
 A = TypeVar("A")
 
 
+# class RspUpdateTermsOfUseVersion(BaseModel):
+#     uid: int
+#     termsVersion: int
+#     state: int
 class Sc(BaseModel, Generic[A]):
     serverInfo: ServerInfo = ServerInfo()
     state: str = "ok"
