@@ -484,3 +484,7 @@ $RECYCLE.BIN/
 *.swp
 
 FurinaLC/
+*.py
+__pycache__/
+*.pyc
+*.txt

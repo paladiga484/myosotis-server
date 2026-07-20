@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0-preview.4.26230.115" />
+    <ProjectReference Include="..\Types\Types.csproj" />
   </ItemGroup>
-
 </Project>
