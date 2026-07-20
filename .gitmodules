@@ -1,0 +1,3 @@
+[submodule "Resource/LimbusStaticData"]
+	path = Resource/LimbusStaticData
+	url = https://git.neonteam.dev/yuvlian/LimbusStaticData

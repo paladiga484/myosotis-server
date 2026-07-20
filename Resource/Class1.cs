@@ -1,4 +1,4 @@
-﻿namespace StaticData;
+﻿namespace Resource;
 
 public class Class1
 {
