@@ -12,7 +12,7 @@ public partial class ApiController
             "list": [
                 {
                     "formatKey": "SubTitle",
-                    "formatValue": "<Boraginaceae>"
+                    "formatValue": "<Myosotis>"
                 },
                 {
                     "formatKey": "Text",
@@ -20,7 +20,7 @@ public partial class ApiController
                 },
                 {
                     "formatKey": "Hyperlink",
-                    "formatValue": "https://github.com/yuvlian/boraginaceae"
+                    "formatValue": "https://github.com/yuvlian/myosotis-server"
                 },
                 {
                     "formatKey": "SubTitle",

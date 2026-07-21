@@ -7,6 +7,7 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddControllers();
         var app = builder.Build();
+        app.UseMiddleware<LoggerMiddleware>();
         app.MapControllers();
         app.Run();
     }
