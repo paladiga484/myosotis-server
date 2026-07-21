@@ -1,16 +1,13 @@
-using Types.Server;
+namespace Server;
 
-var builder = WebApplication.CreateBuilder(args);
-
-var app = builder.Build();
-
-app.MapGet("/refresh-start-ego-gifts", () =>
+public class Program
 {
-    return new ResPacket_RefreshStartEgoGiftsStoryMirrorDungeon
+    public static void Main(string[] args)
     {
-        startEgoGiftPoolSets = [],
-        startEgoGiftCreatedCount = 0
-    };
-});
-
-app.Run();
+        var builder = WebApplication.CreateBuilder(args);
+        builder.Services.AddControllers();
+        var app = builder.Build();
+        app.MapControllers();
+        app.Run();
+    }
+}

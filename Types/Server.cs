@@ -322,7 +322,8 @@ public class GachaLogDetail
     Element sl { get; set; } = new();
 }
 
-public class PityPoint {
+public class PityPoint
+{
     public int gachaID { get; set; }
     public int pityNumber { get; set; }
 }
@@ -360,4 +361,27 @@ public class UserStoryMirrorDungeonShopDataFormat
     public List<int> egpool { get; set; } = [];
     public int rc { get; set; }
     public int fre { get; set; }
+}
+
+public class ServerDispatchInfo
+{
+    public string platform { get; set; } = "";
+    public string serviceType { get; set; } = "";
+    public string serverId { get; set; } = "";
+    public string[] versions { get; set; } = [];
+    public string serverUrl { get; set; } = "";
+    public string logServerUrl { get; set; } = "";
+    public string? presenceServerUrl { get; set; } = null;
+    public string noticeUrl { get; set; } = "";
+    public string cdnUrl { get; set; } = "";
+    public int[] guestAuthErrors { get; set; } = [];
+    public bool enablePacketCrypt { get; set; }
+    public bool enableLogPacketCrypt { get; set; }
+    public bool enableAgreementVersionCheck { get; set; }
+    public bool enableNetworkingUIProcessPurchase { get; set; }
+    public bool enableCheckUpdateCatalogSteamFixed { get; set; }
+    public bool enableCheckUpdateCatalogToTitle { get; set; }
+    public bool enableCheckUpdateTextAsset { get; set; }
+    public bool enableCheckError { get; set; }
+    public bool enableBLogSync { get; set; }
 }
