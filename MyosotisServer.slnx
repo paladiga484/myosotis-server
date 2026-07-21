@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Database/Database.csproj" />
+  <Project Path="Resource/Resource.csproj" />
+  <Project Path="Types/Types.csproj" />
+  <Project Path="Server/Server.csproj" />
+</Solution>
