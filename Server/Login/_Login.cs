@@ -6,4 +6,10 @@ namespace Server.Login;
 [Route("login")]
 public partial class LoginController : ControllerBase
 {
+    protected readonly AccountService _accounts;
+
+    public LoginController(AccountService accounts)
+    {
+        _accounts = accounts;
+    }
 }

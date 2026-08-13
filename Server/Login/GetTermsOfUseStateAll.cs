@@ -9,12 +9,9 @@ public partial class LoginController
     public ActionResult<HttpResponseFormat<ResPacket_GetTermsOfUseStateAll>> GetTermsOfUseStateAll(
         [FromBody] HttpRequestFormat<ReqPacket_GetTermsOfUseStateAll> req)
     {
-        return new HttpResponseFormat<ResPacket_GetTermsOfUseStateAll>()
+        return new HttpResponseFormat<ResPacket_GetTermsOfUseStateAll>
         {
-            serverInfo = new ServerInfo
-            {
-                version = "product"
-            },
+            serverInfo = new ServerInfo { version = "product" },
             state = "ok",
             result = new ResPacket_GetTermsOfUseStateAll
             {
@@ -23,11 +20,11 @@ public partial class LoginController
                     new TermsOfUseState
                     {
                         version = 1,
-                        state = (int)TERMSOFUSE_STATE.AGREE
-                    }
-                ]
+                        state = (int)TERMSOFUSE_STATE.AGREE,
+                    },
+                ],
             },
-            packetId = req.packetId
+            packetId = req.packetId,
         };
     }
 }

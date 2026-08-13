@@ -53,6 +53,7 @@ public enum ELEMENT_TYPE
 public class Element
 {
     public ELEMENT_TYPE type { get; set; }
+    public int _type { get; set; }
     public int id { get; set; }
     public int num { get; set; }
     public string[] tags { get; set; } = [];
@@ -288,12 +289,17 @@ public class DateUtilJsonConverter : JsonConverter<DateUtil>
 {
     public override DateUtil Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (reader.TokenType == JsonTokenType.String && reader.GetString() is { Length: 0 })
+            return default;
         return new DateUtil(reader.GetDateTimeOffset());
     }
 
     public override void Write(Utf8JsonWriter writer, DateUtil value, JsonSerializerOptions options)
     {
-        writer.WriteStringValue(value.Value);
+        if (value.Value == default)
+            writer.WriteStringValue("");
+        else
+            writer.WriteStringValue(value.Value);
     }
 }
 
@@ -316,10 +322,11 @@ public class GachaLog
 public class GachaLogDetail
 {
     public ELEMENT_TYPE type { get; set; }
+    public int _type { get; set; }
     public int id { get; set; }
-    Element ex { get; set; } = new();
-    Element _origin { get; set; } = new();
-    Element sl { get; set; } = new();
+    public Element ex { get; set; } = new();
+    public Element _origin { get; set; } = new();
+    public Element sl { get; set; } = new();
 }
 
 public class PityPoint
@@ -384,4 +391,31 @@ public class ServerDispatchInfo
     public bool enableCheckUpdateTextAsset { get; set; }
     public bool enableCheckError { get; set; }
     public bool enableBLogSync { get; set; }
+}
+
+public sealed class NoticeMeta
+{
+    public string latestUpdateDate { get; set; } = "";
+    public List<NoticeDetailInfo> noticeDetailList { get; set; } = [];
+}
+
+public sealed class NoticeDetailInfo
+{
+    public int id { get; set; }
+    public string startDate { get; set; } = "";
+    public string endDate { get; set; } = "";
+    public string fileName_KR { get; set; } = "";
+    public string fileName_EN { get; set; } = "";
+    public string fileName_JP { get; set; } = "";
+}
+
+public sealed class NoticeDetail
+{
+    public int id { get; set; }
+    public int noticeType { get; set; }
+    public string startDate { get; set; } = "";
+    public string endDate { get; set; } = "";
+    public List<string> sprList { get; set; } = [];
+    public string title { get; set; } = "";
+    public ContentList content { get; set; } = new();
 }

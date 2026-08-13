@@ -1,3 +1,4 @@
+using Common;
 using Microsoft.AspNetCore.Mvc;
 using Types.Server;
 
@@ -5,7 +6,7 @@ namespace Server;
 
 [ApiController]
 [Route("")]
-public class ServerInfosController : ControllerBase
+public class ServerInfosController(Config config) : ControllerBase
 {
     [HttpGet("serverinfos.json")]
     public ActionResult<ServerDispatchInfo[]> Get()
@@ -17,7 +18,7 @@ public class ServerInfosController : ControllerBase
                 platform = "windows",
                 serviceType = "product",
                 serverId = "win_product",
-                versions = ["1.109.1"],
+                versions = config.Server.Versions,
                 serverUrl = "https://www.limbuscompanyapi.com",
                 logServerUrl = "https://battlelog.limbuscompanyapi.com",
                 presenceServerUrl = "https://presence.limbuscompanyapi.com",
@@ -33,7 +34,7 @@ public class ServerInfosController : ControllerBase
                 enableCheckUpdateTextAsset = true,
                 enableCheckError = true,
                 enableBLogSync = true,
-            }
+            },
         };
     }
 }

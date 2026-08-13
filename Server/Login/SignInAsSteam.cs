@@ -1,3 +1,4 @@
+using Common;
 using Microsoft.AspNetCore.Mvc;
 using Types.Server;
 
@@ -6,35 +7,34 @@ namespace Server.Login;
 public partial class LoginController
 {
     [HttpPost("SignInAsSteam")]
-    public ActionResult<HttpResponseFormat<ResPacket_SignInAsSteam>> SignInAsSteam(
+    public async Task<ActionResult<HttpResponseFormat<ResPacket_SignInAsSteam>>> SignInAsSteam(
         [FromBody] HttpRequestFormat<ReqPacket_SignInAsSteam> req)
     {
-        return new HttpResponseFormat<ResPacket_SignInAsSteam>()
+        var result = await _accounts.SignInAsync(req.parameters.steamToken, "steam");
+        if (result.Uid == 0)
+            return StatusCode(StatusCodes.Status401Unauthorized);
+
+        var now = TimeUtil.IsoNow();
+        return new HttpResponseFormat<ResPacket_SignInAsSteam>
         {
-            serverInfo = new ServerInfo
-            {
-                version = "product"
-            },
+            serverInfo = new ServerInfo { version = "product" },
             state = "ok",
             result = new ResPacket_SignInAsSteam
             {
-                walletCurrency = "USD",
-                accountInfo = new AccountInfoFormat
-                {
-                    uid = 1,
-                },
+                walletCurrency = "IDR",
+                accountInfo = new AccountInfoFormat { uid = (ulong)result.Uid },
                 userAuth = new UserAuthFormat
                 {
-                    uid = 1,
-                    public_id = 1,
+                    uid = result.Uid,
+                    public_id = result.Uid,
                     db_id = 0,
-                    auth_code = req.parameters.steamToken,
-                    last_login_date = "2025-03-31T15:10:00.000Z",
-                    last_update_date = "2025-03-31T15:10:00.000Z",
+                    auth_code = result.AuthCode,
+                    last_login_date = now,
+                    last_update_date = now,
                     data_version = 16,
-                }
+                },
             },
-            packetId = req.packetId
+            packetId = req.packetId,
         };
     }
 }

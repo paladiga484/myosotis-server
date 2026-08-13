@@ -1,0 +1,26 @@
+{
+    "server": {
+        "host": "127.0.0.1",
+        "port": 3000,
+        "versions": [
+            "1.111.1"
+        ]
+    },
+    "database": {
+        "path": "myosotis.db"
+    },
+    "staticData": {
+        "path": "Resource/LimbusStaticData/StaticData/static-data"
+    },
+    "auth": {
+        "requireToken": true
+    },
+    "command": {
+        "allowSyncCommand": true,
+        "allowResetDbCommand": true
+    },
+    "logging": {
+        "minimumLevel": "Information",
+        "logBodies": true
+    }
+}

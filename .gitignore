@@ -32,7 +32,6 @@ x86/
 bld/
 [Bb]in/
 [Oo]bj/
-[Ll]og/
 [Ll]ogs/
 
 # Visual Studio 2015/2017 cache/options directory
@@ -489,3 +488,8 @@ __pycache__/
 *.pyc
 *.txt
 Myosotis/
+refs/
+
+*.db
+*.db-shm
+*.db-wal
