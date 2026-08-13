@@ -41,6 +41,17 @@ For a better and more complete private server, you can use https://github.com/LE
 
 - basic dummy gacha implementation
 
+- commands through the coupon menu in-game (case doesn't matter, the client uppercases em):
+
+    | Command | Arguments | Description | Example |
+    | :--- | :--- | :--- | :--- |
+    | `RESET` | - | wipe & reseed ur data | `RESET` |
+    | `SYNC` | `ITEM`, `EGO`, `ANNOUNCER`, `PERSONALITY`, `TICKET`, `BANNER` | sync missing static data (no args = all) | `SYNCITEMEGO` |
+    | `P` | `<id>L<level>G<gacksung>` | set personality level & uptie | `P10101L50G4` |
+    | `E` | `<id>G<gacksung>` | set ego uptie | `E20101G4` |
+    | `I` | `<id>C<count>` | set item count | `I11C100` |
+    | `U` | `<uid>L<level>S<stamina>` | set user level & stamina | `U1L100S100` |
+
 </details>
 
 -- --
