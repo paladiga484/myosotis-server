@@ -4,6 +4,8 @@ Limbus Company private server, originally FurinaLC.
 
 For a better and more complete private server, you can use https://github.com/LEAGUE-OF-NINE/OpenLethe/
 
+Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
+
 ## General Showcase
 
 <details>
@@ -95,6 +97,14 @@ For a better and more complete private server, you can use https://github.com/LE
 2. modify `Config.json` as needed
 
 3. start server: `dotnet run --project Server -c Release`
+
+Notes:
+
+- When the game updates, you probably need to update the `versions` in `Config.json`.
+
+- To get the new stuff (IDs, EGOs, etc.) automatically, you have to update the `LimbusStaticData` and then run the `sync` coupon command.
+
+- As of right now, I haven't made any tool to dump the static data because I'm lazy nor do I want to keep dumping & updating them. You can try using commands to add stuff with the IDs manually, or join the lethe discord to find out how to dump static data yourself.
 
 </details>
 
