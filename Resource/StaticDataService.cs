@@ -26,6 +26,7 @@ public sealed class StaticDataService
     private IReadOnlyList<(int Id, string ProductId)> _iapProducts = [];
     private IReadOnlyList<int> _danteAbilityIds = [];
     private Dictionary<int, IReadOnlyList<GachaEntry>> _gacha = [];
+    private Dictionary<int, int> _personalitySeasons = [];
 
     public StaticDataService(string staticDataRoot, ILogger<StaticDataService> logger)
     {
@@ -46,6 +47,43 @@ public sealed class StaticDataService
     public IReadOnlyList<(int Id, string ProductId)> IapProducts => _iapProducts;
     public IReadOnlyList<int> DanteAbilityIds => _danteAbilityIds;
 
+    /// <summary>
+    /// The Egoshard item an identity converts into when pulled as a duplicate.
+    ///
+    /// Shard ids share the identity's sinner prefix and end in the identity's season, so
+    /// Don Quixote's season-5 identity 10310 maps to item 10305,
+    /// "[Season 5] Don Quixote's Egoshard".
+    ///
+    /// Two wrinkles the raw season field has:
+    ///   season 0   base / season-1 identities (the LCB Sinners) - treated as season 1
+    ///   season 91xx  Walpurgisnacht and other limited identities - the real season is the
+    ///                low two digits, and some of those seasons have no shard of their own
+    ///
+    /// So the exact shard is tried first and, failing that, the highest shard that sinner has.
+    /// Every identity therefore pays out something. Returns 0 only if the sinner has no shard
+    /// item at all.
+    /// </summary>
+    public int EgoshardItemFor(int personalityId)
+    {
+        var prefix = personalityId / 100 * 100;
+
+        if (_personalitySeasons.TryGetValue(personalityId, out var season))
+        {
+            var normalised = season <= 0 ? 1 : season % 100;
+            var exact = prefix + normalised;
+            if (_itemIds.Contains(exact))
+                return exact;
+        }
+
+        // Fall back to that sinner's newest shard.
+        var best = 0;
+        for (var candidate = prefix + 1; candidate <= prefix + 99; candidate++)
+            if (_itemIds.Contains(candidate))
+                best = candidate;
+
+        return best;
+    }
+
     public IReadOnlyList<ChanceFormat> Chances { get; private set; } = [];
     public BattlePassFormat? BattlePass { get; private set; }
     public IReadOnlyList<MainChapterStateFormat> MainChapterStates { get; private set; } = [];
@@ -55,9 +93,27 @@ public sealed class StaticDataService
     public IReadOnlyList<GachaEntry> GetGacha(int id) =>
         _gacha.TryGetValue(id, out var entries) ? entries : [];
 
+    /// <summary>
+    /// The banner to actually roll for a requested id.
+    ///
+    /// The static data dump stops at gacha 288, but a live client asks for whatever banner is
+    /// current - 296 at the time of writing - and gets nothing, which is why the standard banner
+    /// did nothing when pulled. Unknown ids fall back to the newest banner we do have, so pulling
+    /// works with a slightly older pool rather than failing outright. Returns 0 if there are no
+    /// banners at all.
+    /// </summary>
+    public int ResolveGachaId(int requested)
+    {
+        if (_gacha.ContainsKey(requested))
+            return requested;
+
+        return _gacha.Count == 0 ? 0 : _gacha.Keys.Max();
+    }
+
     public async Task LoadAllAsync()
     {
         _personalityIds = await LoadIdsAsync("personality");
+        _personalitySeasons = await LoadPersonalitySeasonsAsync();
         _egoIds = await LoadIdsAsync("ego");
         _itemIds = await LoadIdsAsync("item");
         _announcerIds = await LoadIdsAsync("announcer");
@@ -81,6 +137,19 @@ public sealed class StaticDataService
             "StaticData loaded: {Personalities} personalities, {Egos} egos, {Items} items, {Announcers} announcers, {Banners} banners, {UnlockCodes} unlock codes, {Chances} chances, {Gachas} gacha files",
             _personalityIds.Count, _egoIds.Count, _itemIds.Count, _announcerIds.Count,
             _userBannerIds.Count, _unlockCodeIds.Count, Chances.Count, _gacha.Count);
+    }
+
+    private async Task<Dictionary<int, int>> LoadPersonalitySeasonsAsync()
+    {
+        var seasons = new Dictionary<int, int>();
+        foreach (var file in EnumerateJson("personality"))
+        {
+            var data = await DeserializeAsync<SeasonListFile>(file);
+            foreach (var item in data?.list ?? [])
+                seasons[item.id] = item.season;
+        }
+
+        return seasons;
     }
 
     private async Task<IReadOnlyList<int>> LoadIdsAsync(string folder)
@@ -304,7 +373,7 @@ public sealed class StaticDataService
                 continue;
 
             result[id] = data.list.Select(g => new GachaEntry(
-                g.payments.Select(p => new GachaPayment(p.paymentId, p.count)).ToList(),
+                g.payments.Select(p => new GachaPayment(p.paymentId, p.count, p.requiredItemId, p.requiredNum)).ToList(),
                 g.contents.Select(c => new GachaContent(c.groupType, c.elementType, c.elementIdList)).ToList()))
                 .ToList();
         }
@@ -357,13 +426,21 @@ public sealed class StaticDataService
     private sealed class PassMission { public int missionId { get; set; } public int countMax { get; set; } }
     private sealed class IapProductListFile { public List<IapProductItem> list { get; set; } = []; }
     private sealed class IapProductItem { public int id { get; set; } public string productId { get; set; } = ""; }
+    private sealed class SeasonListFile { public List<SeasonItem> list { get; set; } = []; }
+    private sealed class SeasonItem { public int id { get; set; } public int season { get; set; } }
     private sealed class GachaListFile { public List<GachaItem> list { get; set; } = []; }
     private sealed class GachaItem
     {
         public List<GachaPaymentItem> payments { get; set; } = [];
         public List<GachaContentItem> contents { get; set; } = [];
     }
-    private sealed class GachaPaymentItem { public int paymentId { get; set; } public int count { get; set; } }
+    private sealed class GachaPaymentItem
+    {
+        public int paymentId { get; set; }
+        public int count { get; set; }
+        public int requiredItemId { get; set; }
+        public int requiredNum { get; set; }
+    }
     private sealed class GachaContentItem
     {
         public string groupType { get; set; } = "";
@@ -376,6 +453,6 @@ public sealed record GachaEntry(
     IReadOnlyList<GachaPayment> Payments,
     IReadOnlyList<GachaContent> Contents);
 
-public sealed record GachaPayment(int PaymentId, int Count);
+public sealed record GachaPayment(int PaymentId, int Count, int RequiredItemId, int RequiredNum);
 
 public sealed record GachaContent(string GroupType, string ElementType, IReadOnlyList<int> ElementIdList);

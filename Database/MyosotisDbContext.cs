@@ -26,6 +26,7 @@ public sealed class MyosotisDbContext(DbContextOptions<MyosotisDbContext> option
     public DbSet<RailwaySave> RailwaySaves => Set<RailwaySave>();
     public DbSet<RailwaySaveUnit> RailwaySaveUnits => Set<RailwaySaveUnit>();
     public DbSet<RailwaySaveUnitEgo> RailwaySaveUnitEgos => Set<RailwaySaveUnitEgo>();
+    public DbSet<MirrorDungeonSave> MirrorDungeonSaves => Set<MirrorDungeonSave>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -177,6 +178,13 @@ public sealed class MyosotisDbContext(DbContextOptions<MyosotisDbContext> option
         {
             e.ToTable("railway_saves");
             e.HasKey(x => new { x.Uid, x.DungeonId });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.Uid).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MirrorDungeonSave>(e =>
+        {
+            e.ToTable("mirror_dungeon_saves");
+            e.HasKey(x => x.Uid);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.Uid).OnDelete(DeleteBehavior.Cascade);
         });
 

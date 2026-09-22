@@ -493,3 +493,9 @@ refs/
 *.db
 *.db-shm
 *.db-wal
+logs/
+
+# fork-local: backups made while developing, some of which hold account
+# credentials (the credential string IS the account - auth is decorative)
+*.bak
+*.pre-*.bak

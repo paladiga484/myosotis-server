@@ -1,26 +1,46 @@
 {
-    "server": {
-        "host": "127.0.0.1",
-        "port": 3000,
-        "versions": [
-            "1.112.0"
-        ]
-    },
-    "database": {
-        "path": "myosotis.db"
-    },
-    "staticData": {
-        "path": "Resource/LimbusStaticData/StaticData/static-data"
-    },
-    "auth": {
-        "requireToken": true
-    },
-    "command": {
-        "allowSyncCommand": true,
-        "allowResetDbCommand": true
-    },
-    "logging": {
-        "minimumLevel": "Information",
-        "logBodies": true
-    }
+  "server": {
+    "host": "127.0.0.1",
+    "port": 3000,
+    "versions": [
+      "1.114.0",
+      "1.112.0"
+    ]
+  },
+  "database": {
+    "path": "myosotis.db"
+  },
+  "staticData": {
+    "path": "Resource/LimbusStaticData/StaticData/static-data"
+  },
+  "auth": {
+    "requireToken": true
+  },
+  "command": {
+    "allowSyncCommand": true,
+    "allowResetDbCommand": true
+  },
+  "logging": {
+    "minimumLevel": "Information",
+    "logBodies": false
+  },
+  "mirrorDungeon": {
+    "dungeonId": 7,
+    "probeEncounterEnum": false,
+    "stagesPerFloor": 6
+  },
+  "seed": {
+    "grantEverything": true,
+    "userLevel": 70,
+    "stamina": 180,
+    "personalityLevel": 60,
+    "personalityUptie": 4,
+    "egoUptie": 4,
+    "itemCount": 200,
+    "profile": "everything",
+    "itemProfile": "curated",
+    "balancedRank2Every": 2,
+    "balancedRank3Every": 4,
+    "balancedEgoEvery": 3
+  }
 }

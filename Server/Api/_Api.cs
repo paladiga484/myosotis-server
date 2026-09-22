@@ -24,6 +24,10 @@ public partial class ApiController : ControllerBase
     protected readonly TicketRepository _tickets;
     protected readonly ProfileRepository _profiles;
     protected readonly RailwayRepository _railway;
+    protected readonly MirrorDungeonRepository _mirrorSaves;
+    protected readonly MirrorDungeonData _mirrorData;
+    protected readonly Server.MirrorDungeon.MapGenerator _mapGenerator;
+    protected readonly Server.MirrorDungeon.ThemeFloorPicker _themePicker;
     protected readonly Config _config;
     protected readonly ILogger<ApiController> _logger;
 
@@ -41,6 +45,10 @@ public partial class ApiController : ControllerBase
         TicketRepository tickets,
         ProfileRepository profiles,
         RailwayRepository railway,
+        MirrorDungeonRepository mirrorSaves,
+        MirrorDungeonData mirrorData,
+        Server.MirrorDungeon.MapGenerator mapGenerator,
+        Server.MirrorDungeon.ThemeFloorPicker themePicker,
         Config config,
         ILogger<ApiController> logger)
     {
@@ -57,6 +65,10 @@ public partial class ApiController : ControllerBase
         _tickets = tickets;
         _profiles = profiles;
         _railway = railway;
+        _mirrorSaves = mirrorSaves;
+        _mirrorData = mirrorData;
+        _mapGenerator = mapGenerator;
+        _themePicker = themePicker;
         _config = config;
         _logger = logger;
     }

@@ -8,9 +8,11 @@ using Resource;
 namespace Server;
 
 public sealed class AccountService(
+    Config config,
     MyosotisDbContext db,
     DatabaseService databaseService,
     StaticDataService staticData,
+    NameService names,
     ILogger<AccountService> logger)
 {
     public async Task<SignInResult> SignInAsync(string credential, string accountType)
@@ -45,9 +47,9 @@ public sealed class AccountService(
         {
             Credential = credential,
             AccountType = accountType,
-            Level = SeedValues.UserLevel,
+            Level = config.Seed.UserLevel,
             Exp = 0,
-            Stamina = SeedValues.UserStamina,
+            Stamina = config.Seed.Stamina,
             LastStaminaRecover = now,
             LastLoginAt = now,
             RegisterDate = now,
@@ -88,6 +90,16 @@ public sealed class AccountService(
         db.RailwaySaves.RemoveRange(db.RailwaySaves.Where(x => x.Uid == uid));
         db.RailwaySaveUnits.RemoveRange(db.RailwaySaveUnits.Where(x => x.Uid == uid));
         db.RailwaySaveUnitEgos.RemoveRange(db.RailwaySaveUnitEgos.Where(x => x.Uid == uid));
+        db.MirrorDungeonSaves.RemoveRange(db.MirrorDungeonSaves.Where(x => x.Uid == uid));
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Uid == uid);
+        if (user is not null)
+        {
+            user.Level = config.Seed.UserLevel;
+            user.Exp = 0;
+            user.Stamina = config.Seed.Stamina;
+            user.LastStaminaRecover = now;
+        }
 
         await db.SaveChangesAsync();
         SeedOwned(uid, now);
@@ -95,31 +107,105 @@ public sealed class AccountService(
         await tx.CommitAsync();
 
         databaseService.Invalidate(uid);
-        logger.LogInformation("Reset user {Uid} data", uid);
+        logger.LogInformation(
+            "Reset user {Uid} to profile '{Profile}' at level {Level}",
+            uid, config.Seed.Profile, config.Seed.UserLevel);
+    }
+
+    /// <summary>Identities granted under the balanced profile: all 12 base, a slice of the rest.</summary>
+    private List<int> BalancedPersonalityIds()
+    {
+        var rank2 = new List<int>();
+        var rank3 = new List<int>();
+        var result = new List<int>();
+
+        foreach (var id in staticData.PersonalityIds.OrderBy(i => i))
+        {
+            // The first identity of each sinner - ids ending in 01 - is always included so every
+            // sinner is playable from the start.
+            if (id % 100 == 1) { result.Add(id); continue; }
+
+            switch (names.ForPersonality(id).Rank)
+            {
+                case 2: rank2.Add(id); break;
+                default: rank3.Add(id); break;
+            }
+        }
+
+        result.AddRange(rank2.Where((_, i) => i % Math.Max(1, config.Seed.BalancedRank2Every) == 0));
+        result.AddRange(rank3.Where((_, i) => i % Math.Max(1, config.Seed.BalancedRank3Every) == 0));
+        return result;
     }
 
     private void SeedOwned(long uid, long now)
     {
-        foreach (var id in staticData.PersonalityIds)
+        // GrantEverything is the older switch; Profile supersedes it when set to anything else.
+        var profile = (config.Seed.Profile ?? "everything").Trim().ToLowerInvariant();
+        if (profile == "everything" && !config.Seed.GrantEverything)
+            profile = "empty";
+
+        if (profile == "empty")
+        {
+            logger.LogInformation("Seed profile 'empty' - uid {Uid} starts with nothing", uid);
+            return;
+        }
+
+        var personalityIds = profile switch
+        {
+            "starter"  => staticData.PersonalityIds.Where(id => id % 100 == 1).OrderBy(i => i).ToList(),
+            "balanced" => BalancedPersonalityIds(),
+            _          => staticData.PersonalityIds.ToList(),
+        };
+
+        var egoIds = profile switch
+        {
+            "starter"  => [],
+            "balanced" => staticData.EgoIds.OrderBy(i => i)
+                              .Where((_, i) => i % Math.Max(1, config.Seed.BalancedEgoEvery) == 0)
+                              .ToList(),
+            _          => staticData.EgoIds.ToList(),
+        };
+
+        logger.LogInformation(
+            "Seed profile '{Profile}' for uid {Uid}: {Ids} identities, {Egos} E.G.O., {Items} of each item",
+            profile, uid, personalityIds.Count, egoIds.Count, config.Seed.ItemCount);
+
+        foreach (var id in personalityIds)
         {
             db.UserPersonalities.Add(new UserPersonality
             {
                 Uid = uid,
                 PersonalityId = id,
-                Level = SeedValues.PersonalityLevel,
+                Level = config.Seed.PersonalityLevel,
                 Exp = 0,
-                Gacksung = SeedValues.PersonalityGacksung,
+                Gacksung = config.Seed.PersonalityUptie,
                 OrderId = ProfileUtil.GetOrderId(id),
                 GacksungIllustType = SeedValues.PersonalityGacksungIllustType,
                 AcquireTime = now,
             });
         }
 
-        foreach (var id in staticData.EgoIds)
-            db.UserEgos.Add(new UserEgo { Uid = uid, EgoId = id, Gacksung = SeedValues.EgoGacksung, AcquireTime = now });
+        foreach (var id in egoIds)
+            db.UserEgos.Add(new UserEgo { Uid = uid, EgoId = id, Gacksung = config.Seed.EgoUptie, AcquireTime = now });
 
-        foreach (var id in staticData.ItemIds)
-            db.UserItems.Add(new UserItem { Uid = uid, ItemId = id, Num = SeedValues.ItemCount });
+        var itemProfile = (config.Seed.ItemProfile ?? "all").Trim().ToLowerInvariant();
+        if (itemProfile != "none")
+        {
+            var granted = 0;
+            foreach (var id in staticData.ItemIds)
+            {
+                var num = itemProfile == "curated" ? SeedItems.CuratedCount(id) : config.Seed.ItemCount;
+                if (num <= 0)
+                    continue;
+
+                db.UserItems.Add(new UserItem { Uid = uid, ItemId = id, Num = num });
+                granted++;
+            }
+
+            logger.LogInformation(
+                "Item profile '{ItemProfile}' for uid {Uid}: {Granted} of {Total} item types stocked",
+                itemProfile, uid, granted, staticData.ItemIds.Count);
+        }
 
         var owned = staticData.AnnouncerIds.OrderBy(id => id).ToList();
         foreach (var id in owned)
@@ -148,7 +234,7 @@ public sealed class AccountService(
             Uid = uid,
             // doesnt work, oh well
             PublicUid = ProfileUtil.RandomLetter() + uid.ToString("D9"),
-            IllustId = 10101,
+            IllustId = 10101,   // Yi Sang LCB Sinner - owned in every mode
             IllustGacksungLevel = 1,
             LeftBorderId = -1,
             RightBorderId = -1,
