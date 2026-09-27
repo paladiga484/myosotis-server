@@ -1,4 +1,4 @@
-# myosotis-server🌙🔑READ FEATURES)
+# myosotis-server🌙🔑 (READ FEATURES)
 
 Limbus Company private server, originally FurinaLC.
 
