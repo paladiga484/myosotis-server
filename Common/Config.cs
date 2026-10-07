@@ -17,6 +17,17 @@ public sealed class Config
 
     public string ResolvePath(string relative) => Path.GetFullPath(relative, Root);
 
+    /// <summary>
+    /// Where static data is read from. A dump taken from the installed game
+    /// (<c>Resource/LiveStaticData</c>, written by refresh_static.py) wins over the configured
+    /// path, which is the upstream submodule and only as new as its last manual dump.
+    /// </summary>
+    public string StaticDataRoot()
+    {
+        var live = ResolvePath(StaticDataConfig.LivePath);
+        return Directory.Exists(Path.Combine(live, "personality")) ? live : ResolvePath(StaticData.Path);
+    }
+
     public static Config Load()
     {
         string? configFile = Environment.GetEnvironmentVariable("MYOSOTIS_CONFIG");
@@ -73,6 +84,8 @@ public sealed class DatabaseConfig
 
 public sealed class StaticDataConfig
 {
+    public const string LivePath = "Resource/LiveStaticData/static-data";
+
     public string Path { get; set; } = "Resource/LimbusStaticData/StaticData/static-data";
 }
 

@@ -50,12 +50,13 @@ public partial class ApiController
         }
 
         var pullCount = payment.Count;
+        var items = await _items.ListAsync(uid);
+        var changedItems = new Dictionary<int, int>();
 
         // Charge for the pull. Without this, currency never moves and the client's own count
         // drifts away from the server's on the next data load.
         if (payment.RequiredItemId > 0 && payment.RequiredNum > 0)
         {
-            var items = await _items.ListAsync(uid);
             var held = items.FirstOrDefault(i => i.item_id == payment.RequiredItemId)?.num ?? 0;
             if (held < payment.RequiredNum)
             {
@@ -65,131 +66,141 @@ public partial class ApiController
                 return EmptyGachaResult(req.packetId);
             }
 
-            await _items.UpdateAsync(uid, payment.RequiredItemId, held - payment.RequiredNum);
+            changedItems[payment.RequiredItemId] = held - payment.RequiredNum;
         }
 
-        var chance = new Dictionary<string, double>(StringComparer.Ordinal)
-        {
-            ["1_pickup"] = 0.1,
-            ["1"] = 0.8,
-            ["2"] = 0.075,
-            ["3"] = 0.025,
-            ["3_pickup"] = 0.0,
-            ["2_pickup"] = 0.0,
-        };
+        // Rates come from the banner itself: each content group carries its weight out of 10000
+        // per draw case. The old hard-coded table gave the featured 000 5% against 2.5% for every
+        // other 000 combined, so the pickup (Dimension Shredder Yi Sang on fallback banner 288)
+        // came up constantly.
+        var ownedIds = await _personalities.GetIdsAsync(uid);
+        var ownedEgos = await _egos.GetIdsAsync(uid);
+        var contents = entries.SelectMany(e => e.Contents)
+            .Where(c => c.ElementType is "PERSONALITY" or "EGO" && c.ElementIdList.Count > 0)
+            .ToList();
 
-        var featuredAdjusted = false;
-        foreach (var entry in entries)
-        {
-            var groupTypes = entry.Contents
-                .Where(c => c.ElementType == "PERSONALITY")
-                .Select(c => c.GroupType)
-                .ToHashSet();
-
-            if (groupTypes.Contains("3_pickup") && !featuredAdjusted)
-            {
-                chance["3_pickup"] = 0.05;
-                chance["1"] -= 0.05;
-                featuredAdjusted = true;
-            }
-            else if (groupTypes.Contains("2_pickup") && !featuredAdjusted)
-            {
-                chance["2_pickup"] = 0.15;
-                chance["1"] -= 0.15;
-                featuredAdjusted = true;
-            }
-        }
-
-        var idsByGroup = chance.Keys.ToDictionary(g => g, _ => new List<int>());
-        foreach (var entry in entries)
-        {
-            foreach (var content in entry.Contents.Where(c => c.ElementType == "PERSONALITY" && idsByGroup.ContainsKey(c.GroupType)))
-                idsByGroup[content.GroupType].AddRange(content.ElementIdList);
-        }
-
-        // Roll each pull independently against the rate table, so a ten-pull can and does repeat
-        // an identity - the old version drew a distinct set, which made dupes impossible.
-        var pulled = new List<int>();
+        var pulled = new List<(ELEMENT_TYPE Type, int Id)>();
         for (int i = 0; i < pullCount; i++)
         {
-            var roll = Random.Shared.NextDouble();
-            var cumulative = 0.0;
-            foreach (var (group, probability) in chance)
-            {
-                if (probability <= 0)
-                    continue;
-                cumulative += probability;
-                if (roll > cumulative)
-                    continue;
+            var tenth = pullCount >= 10 && i == pullCount - 1;
+            // E.G.O. are never pulled twice; once the banner's are all owned, the game switches
+            // to the COMPLETE_EGO_* weights, which move the E.G.O. share onto the identities.
+            var egoPool = contents.Where(c => c.ElementType == "EGO")
+                .SelectMany(c => c.ElementIdList).Where(id => !ownedEgos.Contains(id)).Distinct().ToList();
+            var caseName = (egoPool.Count == 0 ? "COMPLETE_EGO_" : "") + (tenth ? "TENTH" : "DEFAULT");
 
-                var pool = idsByGroup[group].Distinct().ToList();
-                if (pool.Count > 0)
-                    pulled.Add(pool[Random.Shared.Next(pool.Count)]);
+            var weighted = contents
+                .Where(c => c.ElementType != "EGO" || egoPool.Count > 0)
+                .Select(c => (Content: c, Weight: Weight(c, caseName, tenth)))
+                .Where(x => x.Weight > 0)
+                .ToList();
+            var total = weighted.Sum(x => x.Weight);
+            if (total <= 0)
                 break;
-            }
-        }
 
-        // Fall back to any content if the rate table left a pull unfilled.
-        var anyPool = idsByGroup.Values.SelectMany(x => x).Distinct().ToList();
-        while (pulled.Count < pullCount && anyPool.Count > 0)
-            pulled.Add(anyPool[Random.Shared.Next(anyPool.Count)]);
-
-        // Actually hand them over. Previously the result was cosmetic: the animation played and
-        // the account gained nothing.
-        var ownedIds = await _personalities.GetIdsAsync(uid);
-        var newIds = new List<int>();
-        var duplicateIds = new List<int>();
-        foreach (var id in pulled)
-        {
-            if (ownedIds.Add(id))
-                newIds.Add(id);
-            else
-                duplicateIds.Add(id);
-        }
-
-        if (newIds.Count > 0)
-            await _personalities.SyncNewAsync(uid, ownedIds);
-
-        if (duplicateIds.Count > 0)
-        {
-            var items = await _items.ListAsync(uid);
-            foreach (var group in duplicateIds.GroupBy(_staticData.EgoshardItemFor))
+            var roll = Random.Shared.Next(total);
+            var chosen = weighted[^1].Content;
+            foreach (var (content, weight) in weighted)
             {
-                if (group.Key == 0)
-                {
-                    _logger.LogWarning(
-                        "No Egoshard item for duplicate identities {Ids}; they paid out nothing",
-                        string.Join(", ", group.Distinct()));
-                    continue;
-                }
+                if (roll < weight) { chosen = content; break; }
+                roll -= weight;
+            }
 
-                var held = items.FirstOrDefault(i => i.item_id == group.Key)?.num ?? 0;
-                await _items.UpdateAsync(uid, group.Key, held + group.Count() * DuplicateShardValue);
+            if (chosen.ElementType == "EGO")
+            {
+                var ego = egoPool[Random.Shared.Next(egoPool.Count)];
+                ownedEgos.Add(ego);
+                pulled.Add((ELEMENT_TYPE.EGO, ego));
+            }
+            else
+            {
+                var pool = chosen.ElementIdList;
+                pulled.Add((ELEMENT_TYPE.PERSONALITY, pool[Random.Shared.Next(pool.Count)]));
             }
         }
+
+        // Hand them over, and tell the client what changed. Duplicates name their payout in
+        // `ex`; leaving it empty is what broke the result screen (and its skip button) on an
+        // account that already owns everything.
+        var details = new List<GachaLogDetail>();
+        var newPersonalities = new List<int>();
+        var newEgos = new List<int>();
+        var duplicates = 0;
+        foreach (var (type, id) in pulled)
+        {
+            var detail = new GachaLogDetail { type = type, _type = (int)type, id = id };
+            if (type == ELEMENT_TYPE.EGO)
+                newEgos.Add(id);
+            else if (ownedIds.Add(id))
+                newPersonalities.Add(id);
+            else
+            {
+                duplicates++;
+                var shard = _staticData.EgoshardItemFor(id);
+                if (shard == 0)
+                    _logger.LogWarning("No Egoshard item for duplicate identity {Id}; it paid out nothing", id);
+                else
+                {
+                    var held = changedItems.TryGetValue(shard, out var c)
+                        ? c
+                        : items.FirstOrDefault(x => x.item_id == shard)?.num ?? 0;
+                    changedItems[shard] = held + DuplicateShardValue;
+                    detail.ex = new Element
+                    {
+                        type = ELEMENT_TYPE.ITEM, _type = (int)ELEMENT_TYPE.ITEM,
+                        id = shard, num = DuplicateShardValue,
+                    };
+                }
+            }
+            details.Add(detail);
+        }
+
+        foreach (var (itemId, num) in changedItems)
+            await _items.UpdateAsync(uid, itemId, num);
+
+        var personalityList = newPersonalities.Count > 0
+            ? (await _personalities.SyncNewAsync(uid, ownedIds)).Where(p => newPersonalities.Contains(p.personality_id)).ToList()
+            : null;
+        var egoList = newEgos.Count > 0 ? await _egos.SyncNewAsync(uid, newEgos) : null;
 
         _logger.LogInformation(
-            "PlayGacha uid {Uid} gacha {GachaId}: {Count} pulls, {New} new, {Dupes} duplicates "
-            + "(cost {Num} of item {Item})",
-            uid, gachaId, pullCount, newIds.Count, duplicateIds.Count,
-            payment.RequiredNum, payment.RequiredItemId);
+            "PlayGacha uid {Uid} gacha {GachaId}: {Count} pulls, {New} new identities, {Egos} E.G.O., "
+            + "{Dupes} duplicates (cost {Num} of item {Item}): {Ids}",
+            uid, gachaId, pullCount, newPersonalities.Count, newEgos.Count, duplicates,
+            payment.RequiredNum, payment.RequiredItemId, string.Join(",", pulled.Select(p => p.Id)));
 
         return new HttpResponseFormat<ResPacket_PlayGacha>
         {
             serverInfo = new ServerInfo { version = "product" },
             state = "ok",
-            result = new ResPacket_PlayGacha
+            updated = new UpdatedFormat
             {
-                gachaLogDetails = pulled.Select(id => new GachaLogDetail
-                {
-                    type = ELEMENT_TYPE.PERSONALITY,
-                    _type = (int)ELEMENT_TYPE.PERSONALITY,
-                    id = id,
-                    ex = new Element(),
-                    _origin = new Element(),
-                }).ToList(),
+                itemList = changedItems.Select(kv => new ItemFormat { item_id = kv.Key, num = kv.Value }).ToList(),
+                personalityList = personalityList,
+                egoList = egoList,
             },
+            result = new ResPacket_PlayGacha { gachaLogDetails = details },
             packetId = req.packetId,
+        };
+    }
+
+    /// <summary>A group's weight for this draw. Old banners without occupancy fall back to
+    /// the game's published rates (0: 83%, 00: 12.8%, 000: 2.9% split with the pickup).</summary>
+    private static int Weight(GachaContent c, string caseName, bool tenth)
+    {
+        if (c.Occupancy.Count > 0)
+            return c.Occupancy.TryGetValue(caseName, out var w) ? w
+                : !caseName.StartsWith("COMPLETE_EGO_") ? 0
+                : c.Occupancy.GetValueOrDefault(caseName["COMPLETE_EGO_".Length..]);
+
+        return c.GroupType switch
+        {
+            "1" => tenth ? 0 : 8300,
+            "2" => tenth ? 9580 : 1280,
+            "2_pickup" => 0,
+            "3" or "3_pickup" => 145,
+            "EGO" => 130,
+            _ => 0,
         };
     }
 

@@ -30,17 +30,17 @@ builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<DatabaseService>();
 
 builder.Services.AddSingleton(sp => new StaticDataService(
-    config.ResolvePath(config.StaticData.Path),
+    config.StaticDataRoot(),
     sp.GetRequiredService<ILogger<StaticDataService>>()));
 
 builder.Services.AddSingleton(sp => new MirrorDungeonData(
-    config.ResolvePath(config.StaticData.Path),
+    config.StaticDataRoot(),
     sp.GetRequiredService<ILogger<MirrorDungeonData>>()));
 builder.Services.AddSingleton<Server.MirrorDungeon.MapGenerator>();
 builder.Services.AddSingleton<Server.MirrorDungeon.ThemeFloorPicker>();
 
 builder.Services.AddSingleton(sp => new NameService(
-    config.ResolvePath(config.StaticData.Path),
+    config.StaticDataRoot(),
     sp.GetRequiredService<ILogger<NameService>>()));
 builder.Services.AddDbContext<MyosotisDbContext>(o =>
     o.UseSqlite($"Data Source={config.ResolvePath(config.Database.Path)};Foreign Keys=True"));

@@ -499,3 +499,7 @@ logs/
 # credentials (the credential string IS the account - auth is decorative)
 *.bak
 *.pre-*.bak
+
+# game data dumped from the local install by refresh_static.py - not ours to publish
+Resource/LiveStaticData/
+Resource/LiveStaticData.new/

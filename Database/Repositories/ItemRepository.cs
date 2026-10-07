@@ -23,7 +23,14 @@ public sealed class ItemRepository(
     {
         var row = await Db.UserItems.FirstOrDefaultAsync(x => x.Uid == uid && x.ItemId == itemId);
         if (row is null)
-            return true;
+        {
+            // An item the account never held (a new season's shard, say) has no row yet;
+            // silently skipping it is how gacha duplicates used to pay out nothing.
+            if (num is null)
+                return true;
+            Db.UserItems.Add(new UserItem { Uid = uid, ItemId = itemId, Num = num.Value });
+            return await SaveAsync(uid);
+        }
 
         if (num is not null) row.Num = num.Value;
         return await SaveAsync(uid);

@@ -374,7 +374,8 @@ public sealed class StaticDataService
 
             result[id] = data.list.Select(g => new GachaEntry(
                 g.payments.Select(p => new GachaPayment(p.paymentId, p.count, p.requiredItemId, p.requiredNum)).ToList(),
-                g.contents.Select(c => new GachaContent(c.groupType, c.elementType, c.elementIdList)).ToList()))
+                g.contents.Select(c => new GachaContent(c.groupType, c.elementType, c.elementIdList,
+                    c.occupancyCaseList.ToDictionary(o => o.occupancyCase, o => o.occupancy))).ToList()))
                 .ToList();
         }
 
@@ -446,6 +447,12 @@ public sealed class StaticDataService
         public string groupType { get; set; } = "";
         public string elementType { get; set; } = "";
         public List<int> elementIdList { get; set; } = [];
+        public List<GachaOccupancyItem> occupancyCaseList { get; set; } = [];
+    }
+    private sealed class GachaOccupancyItem
+    {
+        public string occupancyCase { get; set; } = "";
+        public int occupancy { get; set; }
     }
 }
 
@@ -455,4 +462,10 @@ public sealed record GachaEntry(
 
 public sealed record GachaPayment(int PaymentId, int Count, int RequiredItemId, int RequiredNum);
 
-public sealed record GachaContent(string GroupType, string ElementType, IReadOnlyList<int> ElementIdList);
+/// <param name="Occupancy">
+/// Weight per draw case, out of 10000 summed over a banner's groups: DEFAULT, TENTH (the
+/// guaranteed slot of a ten-pull), and COMPLETE_EGO_* (used once every banner E.G.O. is owned).
+/// </param>
+public sealed record GachaContent(
+    string GroupType, string ElementType, IReadOnlyList<int> ElementIdList,
+    IReadOnlyDictionary<string, int> Occupancy);
