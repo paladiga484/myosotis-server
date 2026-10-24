@@ -38,11 +38,13 @@ public sealed record SeedDto(
     string Profile = "everything", string ItemProfile = "all");
 
 /// <summary>
-/// Local mod-menu UI. Deliberately NOT under /api/ so it bypasses AuthMiddleware -- the
-/// server binds to 127.0.0.1, so anything that can reach this already owns the machine.
+/// Local mod-menu UI. Deliberately NOT under /api/ so it bypasses AuthMiddleware: the
+/// server binds to 127.0.0.1. A browser on this machine can still be steered at it by any
+/// web page, though, so <see cref="LocalOnly"/> guards every route.
 /// </summary>
 [ApiController]
 [Route("tweak")]
+[LocalOnly]
 public sealed class TweakController(
     Config config,
     MyosotisDbContext db,
@@ -56,6 +58,19 @@ public sealed class TweakController(
 
     [HttpGet("")]
     public ContentResult Page() => Content(TweakPage.Html, "text/html; charset=utf-8");
+
+    /// <summary>The app's own icon, from the local icon theme (MIRROR_ICON overrides).</summary>
+    [HttpGet("icon")]
+    public IActionResult Icon()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var path = Environment.GetEnvironmentVariable("MIRROR_ICON") is { Length: > 0 } custom
+            ? custom
+            : Path.Combine(home, ".local/share/icons/hicolor/128x128/apps/patchlc-mirror.png");
+        return Path.IsPathFullyQualified(path) && System.IO.File.Exists(path)
+            ? PhysicalFile(path, "image/png")
+            : NotFound();
+    }
 
     [HttpGet("api/accounts")]
     public async Task<ActionResult<List<UserRow>>> Accounts() =>
@@ -415,5 +430,28 @@ public sealed class TweakController(
         }
 
         return n;
+    }
+}
+
+/// <summary>
+/// Requests have to name this server by its loopback address, so a page that points its
+/// own domain at 127.0.0.1 (DNS rebinding) is refused, and every write has to carry an
+/// X-Mirror header, which a page from anywhere else can't add without the server's
+/// consent (it never gives it) - so a stray link can't reset an account.
+/// </summary>
+public sealed class LocalOnlyAttribute : Microsoft.AspNetCore.Mvc.Filters.ActionFilterAttribute
+{
+    public override void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+    {
+        var request = context.HttpContext.Request;
+        var host = request.Host.Host;
+        if (host is not ("127.0.0.1" or "localhost" or "[::1]"))
+        {
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
+            return;
+        }
+        if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method)
+            && request.Headers["X-Mirror"] != "1")
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
     }
 }
