@@ -68,8 +68,9 @@ Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
 
 - gacha is kinda broken if the banner doesnt have anything in staticdata
 
-- story dungeon and refraction are not supported!! railway runs but gives no rewards, and
-  mirror dungeon shops and gift crafting are empty stubs (its gift and exit rewards work)
+- story dungeon, boss raid and refraction are not supported!! story stages, exp luxcavation and
+  railway play but give no rewards, event rewards grant nothing, and mirror dungeon shops and
+  gift crafting are empty stubs (its gift and exit rewards work)
 
 - etc.
 
