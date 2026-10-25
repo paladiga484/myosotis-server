@@ -77,6 +77,56 @@ public sealed class TweakController(
         return path is null ? NotFound() : PhysicalFile(path, "image/png");
     }
 
+    // ── the Black Forest ────────────────────────────────────────────────────────────────
+
+    static readonly Dictionary<string, (string File, string Type)> ForestAssets = new()
+    {
+        ["gate"] = ("blackforest-gate.png", "image/png"),
+        ["backdrop"] = ("blackforest-jumpscare.png", "image/png"),
+        ["cry"] = ("blackforest-cry.ogg", "audio/ogg"),
+    };
+
+    /// <summary>The gate's art and the bird's cry, from this machine only: BLACKFOREST_DIR,
+    /// the art folder beside the server (Linux), or blackforest/ beside Config.json (Windows).
+    /// None of it ships with the server.</summary>
+    [HttpGet("blackforest/{name}")]
+    public IActionResult ForestAsset(string name)
+    {
+        if (!ForestAssets.TryGetValue(name, out var asset))
+            return NotFound();
+        string[] dirs =
+        [
+            Environment.GetEnvironmentVariable("BLACKFOREST_DIR") ?? "",
+            config.ResolvePath("../art"),
+            config.ResolvePath("blackforest"),
+        ];
+        var path = dirs.Where(d => d.Length > 0 && Path.IsPathFullyQualified(d))
+            .Select(d => Path.Combine(d, asset.File)).FirstOrDefault(System.IO.File.Exists);
+        return path is null ? NotFound() : PhysicalFile(path, asset.Type);
+    }
+
+    [HttpGet("api/account/{uid:long}/blackforest")]
+    public IActionResult ForestState(long uid) => Ok(new { open = BlackForest.For(config).IsOpen(uid) });
+
+    /// <summary>The watcher beside the game saw Greencliff die: the account in this machine's
+    /// current fight wins it and finds the gate open.</summary>
+    [HttpPost("api/blackforest/fell")]
+    public IActionResult ForestFell()
+    {
+        var uid = BlackForest.For(config).Fell();
+        if (uid == 0)
+            return Conflict(new { error = "no fight from this machine is known" });
+        logger.LogInformation("The Black Forest opened for uid {Uid}", uid);
+        return Ok(new { uid });
+    }
+
+    [HttpPost("api/account/{uid:long}/blackforest/seal")]
+    public IActionResult ForestSeal(long uid)
+    {
+        BlackForest.For(config).Seal(uid);
+        return Ok(new { open = false });
+    }
+
     [HttpGet("api/accounts")]
     public async Task<ActionResult<List<UserRow>>> Accounts() =>
         await db.Users.AsNoTracking()

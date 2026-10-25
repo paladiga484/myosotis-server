@@ -9,6 +9,7 @@ public partial class ApiController
     public ActionResult<HttpResponseFormat<ResPacket_EnterStageBattle>> EnterStageBattle(
         [FromBody] HttpRequestFormat<ReqPacket_EnterStageBattle> req)
     {
+        BlackForest.For(_config).NoteBattle(HttpContext.GetUid(), BlackForest.IsLocal(HttpContext));
         return new HttpResponseFormat<ResPacket_EnterStageBattle>
         {
             serverInfo = new ServerInfo { version = "product" },

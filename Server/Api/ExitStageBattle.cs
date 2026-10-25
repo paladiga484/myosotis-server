@@ -10,6 +10,8 @@ public partial class ApiController
         [FromBody] HttpRequestFormat<ReqPacket_ExitStageBattle> req)
     {
         var uid = HttpContext.GetUid();
+        // Greencliff took everyone with him: the fight counts as won
+        var iswin = BlackForest.For(_config).TakeWin(uid) || req.parameters.iswin;
         var formation = await _formations.GetAsync(uid, req.parameters.formationid);
         var levels = await _personalities.GetLevelsAsync(
             uid, formation?.formationDetails.Select(d => d.personalityId).ToList() ?? []);
@@ -21,7 +23,7 @@ public partial class ApiController
             result = new ResPacket_ExitStageBattle
             {
                 stageid = req.parameters.stageid,
-                iswin = req.parameters.iswin,
+                iswin = iswin,
                 cleartype = (int)CLEARNODE_STATE.EXCLEAR,
                 personalityinfos = formation is null
                     ? []

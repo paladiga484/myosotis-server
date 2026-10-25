@@ -51,6 +51,24 @@ public static class TweakPage
        font-variant-numeric:tabular-nums}
   svg{width:24px;height:24px;fill:currentColor;flex:none}
   .hide{display:none!important}
+  /* the Black Forest: no brass here */
+  #tab-forest{position:relative;min-height:70vh;border-radius:12px;overflow:hidden;background:#050304;
+    display:grid;place-items:center;text-align:center}
+  #tab-forest .door{background:none;border:0;padding:0;cursor:pointer;filter:drop-shadow(0 0 24px #b3121244);
+    transition:filter .6s,transform .6s}
+  #tab-forest .door:hover,#tab-forest .door:focus-visible{filter:drop-shadow(0 0 48px #e01b1baa);transform:scale(1.02)}
+  #tab-forest .door img{max-height:58vh;max-width:100%;display:block}
+  #tab-forest .door-says{margin:16px 0 0;color:#c9b48a;font:italic 400 16px/24px var(--display)}
+  #tab-forest .within{position:absolute;inset:0;background:#000 center/cover no-repeat;display:flex;
+    flex-direction:column;justify-content:flex-end;padding:32px;animation:fall 2.4s ease-out}
+  #tab-forest .within::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent 30%,#000d 85%)}
+  #tab-forest .within > *{position:relative}
+  #tab-forest .within h2{margin:0;color:#e9d9b0;font:400 32px/40px var(--display);letter-spacing:.04em}
+  #tab-forest .within p{color:#cbb995;max-width:60ch;margin:8px auto}
+  #tab-forest .within .btn{margin:16px auto 0}
+  @keyframes fall{from{filter:brightness(0) blur(6px)}to{filter:none}}
+  .drawer a.forest{color:#d14b4b}
+  @media (prefers-reduced-motion:reduce){#tab-forest .within{animation:none}#tab-forest .door{transition:none}}
 
   /* navigation drawer */
   .drawer{display:flex;flex-direction:column;gap:2px;padding:12px;background:var(--container-low);
@@ -243,6 +261,7 @@ public static class TweakPage
   <hr>
   <p class="dhead">Accounts</p>
   <a data-tab="acct"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>This account</span><em></em></a>
+  <a data-tab="forest" class="forest hide" id="forestlink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 6 4 10v12h4v-6a4 4 0 0 1 8 0v6h4V10c0-4-3-8-8-8zm0 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg><span>The Black Forest</span><em></em></a>
   <a data-tab="seed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>New accounts</span><em></em></a>
   <div class="foot"><img id="appicon" src="tweak/icon" alt="" width="40" height="40">
     <div>Mirror<small>Limbus private server</small></div></div>
@@ -343,6 +362,20 @@ public static class TweakPage
              Shop purchases, gift crafting and starlight aren't implemented by the server at all.</p>
         </div>
       </div>
+    </section>
+
+    <section id="tab-forest" class="hide" aria-label="The Black Forest">
+      <div id="forestdoor">
+        <button class="door" id="enterforest" title="Enter"><img src="tweak/blackforest/gate" alt="A gate of black trees around a burning eye"></button>
+        <p class="door-says">It's the monster! Big terrible monster lives in the dark, black forest!</p>
+      </div>
+      <div class="within hide" id="forestwithin" style="background-image:url(tweak/blackforest/backdrop)">
+        <h2>The Black Forest</h2>
+        <p>Greencliff fell, and took everyone with him. Gebura and the green sinners will wait here,
+           once they exist.</p>
+        <button class="btn tonal" id="sealforest">Seal the gate</button>
+      </div>
+      <audio id="forestcry" src="tweak/blackforest/cry" preload="none"></audio>
     </section>
 
     <section id="tab-seed" class="hide">
@@ -478,8 +511,29 @@ async function load(){
   $("#sinnerSel").innerHTML = `<option value="">Every sinner</option>` +
     names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
   render(); erender(); irender(); crender(); markClean();
+  await forestState();
   say("");
 }
+
+/* ── the Black Forest ────────────────────────────────────────────────── */
+async function forestState(){
+  const f = await fetch(`tweak/api/account/${uid}/blackforest`).then(x => x.json()).catch(() => ({open:false}));
+  $("#forestlink").classList.toggle("hide", !f.open);
+  if(!f.open && LS.get("tab","ids") === "forest") showTab("ids");
+  $("#forestdoor").classList.remove("hide");
+  $("#forestwithin").classList.add("hide");
+}
+$("#enterforest").onclick = () => {
+  $("#forestdoor").classList.add("hide");
+  $("#forestwithin").classList.remove("hide");
+  const cry = $("#forestcry"); cry.currentTime = 0; cry.play().catch(() => {});
+};
+$("#sealforest").onclick = async () => {
+  if(!await ask("Seal the gate?", "The Black Forest closes for this account until Greencliff falls again.", "Seal")) return;
+  const r = await post(`tweak/api/account/${uid}/blackforest/seal`);
+  say(r.ok ? "The gate is sealed." : "Could not seal it.", r.ok ? "ok" : "err");
+  await forestState(); showTab("ids");
+};
 
 function renderSeed(){
   if(!seed) return;
@@ -634,7 +688,7 @@ $$("[data-ebulk]").forEach(b => b.onclick = () => {
 /* ── navigation ──────────────────────────────────────────────────────── */
 function showTab(name){
   $$("#index a").forEach(x => x.classList.toggle("on", x.dataset.tab === name));
-  ["ids","ego","items","cos","acct","seed"].forEach(t => $("#tab-"+t).classList.toggle("hide", t !== name));
+  ["ids","ego","items","cos","acct","seed","forest"].forEach(t => $("#tab-"+t).classList.toggle("hide", t !== name));
   LS.set("tab", name);
 }
 $$("#index a").forEach(a => { a.tabIndex = 0; a.onclick = () => showTab(a.dataset.tab);

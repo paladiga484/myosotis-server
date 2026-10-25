@@ -506,3 +506,7 @@ logs/
 # game data dumped from the local install by refresh_static.py - not ours to publish
 Resource/LiveStaticData/
 Resource/LiveStaticData.new/
+
+# which accounts opened the Black Forest (Server/BlackForest.cs)
+blackforest.json
+blackforest.json.tmp
