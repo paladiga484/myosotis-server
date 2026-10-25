@@ -61,6 +61,8 @@ builder.Services.AddScoped<ProfileRepository>();
 builder.Services.AddScoped<RailwayRepository>();
 builder.Services.AddScoped<MirrorDungeonRepository>();
 builder.Services.AddScoped<AccountService>();
+builder.Services.AddSingleton<Server.Launcher.LauncherService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<Server.Launcher.LauncherService>());
 
 builder.Services.AddControllers();
 
@@ -70,6 +72,9 @@ Log.Information("Supported versions: {Versions}", string.Join(", ", config.Serve
 Log.Information("Require token: {RequireToken}", config.Auth.RequireToken);
 Log.Information("Sync command allowed: {AllowSyncCommand}", config.Command.AllowSyncCommand);
 Log.Information("Reset DB command allowed: {AllowResetDbCommand}", config.Command.AllowResetDbCommand);
+if (config.Launcher.Enabled)
+    Log.Information("App window at /launcher (stops {Idle}s after it closes, unless Limbus is running)",
+        config.Launcher.IdleStopSeconds);
 
 var listen = ListenAddresses(config);
 foreach (var address in listen)

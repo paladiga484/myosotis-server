@@ -59,17 +59,22 @@ public sealed class TweakController(
     [HttpGet("")]
     public ContentResult Page() => Content(TweakPage.Html, "text/html; charset=utf-8");
 
-    /// <summary>The app's own icon, from the local icon theme (MIRROR_ICON overrides).</summary>
+    /// <summary>
+    /// The app's own icon: MIRROR_ICON if set, else the local icon theme's, else mirror.png beside
+    /// Config.json (the Windows package).
+    /// </summary>
     [HttpGet("icon")]
     public IActionResult Icon()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var path = Environment.GetEnvironmentVariable("MIRROR_ICON") is { Length: > 0 } custom
-            ? custom
-            : Path.Combine(home, ".local/share/icons/hicolor/128x128/apps/patchlc-mirror.png");
-        return Path.IsPathFullyQualified(path) && System.IO.File.Exists(path)
-            ? PhysicalFile(path, "image/png")
-            : NotFound();
+        string[] candidates =
+        [
+            Environment.GetEnvironmentVariable("MIRROR_ICON") ?? "",
+            Path.Combine(home, ".local/share/icons/hicolor/128x128/apps/patchlc-mirror.png"),
+            config.ResolvePath("mirror.png"),
+        ];
+        var path = candidates.FirstOrDefault(p => p.Length > 0 && Path.IsPathFullyQualified(p) && System.IO.File.Exists(p));
+        return path is null ? NotFound() : PhysicalFile(path, "image/png");
     }
 
     [HttpGet("api/accounts")]

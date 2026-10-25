@@ -68,8 +68,8 @@ Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
 
 - gacha is kinda broken if the banner doesnt have anything in staticdata
 
-- story dungeon, railway, refraction are not supported!! mirror dungeon shops, gift
-  crafting and battle rewards are not either
+- story dungeon and refraction are not supported!! railway runs but gives no rewards, and
+  mirror dungeon shops and gift crafting are empty stubs (its gift and exit rewards work)
 
 - etc.
 
@@ -95,6 +95,9 @@ friends don't run a server themselves.
 - The mod menu (`/tweak`) only answers requests from the machine the server runs on.
 - Each friend's `myosotis.ini` points `server=` and `serverinfos_url=` at your private-network
   address, with a `token=` of their own: the token *is* their account, like a password.
+- On Windows, `App/` is a small app ("Limbus Private Server.exe") that does all of this from a
+  window: it starts the server out of sight and opens `/launcher` (on when `launcher.enabled`
+  is set) - play here or on a friend's server, host, open the mod menu, quit.
 
 </details>
 

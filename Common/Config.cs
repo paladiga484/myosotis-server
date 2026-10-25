@@ -12,6 +12,7 @@ public sealed class Config
     public LoggingConfig Logging { get; set; } = new();
     public SeedConfig Seed { get; set; } = new();
     public MirrorDungeonConfig MirrorDungeon { get; set; } = new();
+    public LauncherConfig Launcher { get; set; } = new();
 
     public string Root { get; set; } = "";
 
@@ -174,4 +175,29 @@ public sealed class MirrorDungeonConfig
     /// static data specifies and which produces uneven floors (6/5/5/5/6).
     /// </summary>
     public int StagesPerFloor { get; set; } = 6;
+}
+
+/// <summary>
+/// The Windows app's window (GET /launcher): play here or on a friend's server, host for
+/// friends, open the mod menu. It starts the game and the patch, so it is off unless the
+/// friend package turns it on, and like the mod menu it only answers this machine.
+/// </summary>
+public sealed class LauncherConfig
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>myoink.exe + myosotis.dll for playing on this server, relative to Config.json.</summary>
+    public string ClientDir { get; set; } = "../client";
+
+    /// <summary>The same pair, set up for a friend's server.</summary>
+    public string JoinDir { get; set; } = "../join";
+
+    /// <summary>The app itself, started again to restart the server after a hosting change.</summary>
+    public string AppPath { get; set; } = "../Limbus Private Server.exe";
+
+    /// <summary>
+    /// Stop the server once the window has been closed this long, unless Limbus is running or
+    /// friends can connect. 0 keeps it running.
+    /// </summary>
+    public int IdleStopSeconds { get; set; } = 20;
 }
