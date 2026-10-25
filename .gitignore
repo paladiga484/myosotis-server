@@ -496,9 +496,12 @@ refs/
 logs/
 
 # fork-local: backups made while developing, some of which hold account
-# credentials (the credential string IS the account - auth is decorative)
+# credentials (the credential string IS the account)
 *.bak
 *.pre-*.bak
+
+# the key auth codes are signed with - whoever has it can sign in as anyone
+*.key
 
 # game data dumped from the local install by refresh_static.py - not ours to publish
 Resource/LiveStaticData/

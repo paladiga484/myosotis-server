@@ -41,6 +41,9 @@ Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
 
 - story node battles, luxcavation battles
 
+- mirror dungeon: normal, hard, infinite and extreme (MDE), whatever season the game's data has
+  (season 8 on 1.117) - maps, theme floors, starting gifts, every floor to its boss, resume
+
 - basic dummy gacha implementation
 
 - commands through the coupon menu in-game (case doesn't matter, the client uppercases em):
@@ -52,7 +55,7 @@ Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
     | `P` | `<id>L<level>G<gacksung>` | set personality level & uptie | `P10101L50G4` |
     | `E` | `<id>G<gacksung>` | set ego uptie | `E20101G4` |
     | `I` | `<id>C<count>` | set item count | `I11C100` |
-    | `U` | `<uid>L<level>S<stamina>` | set user level & stamina | `U1L100S100` |
+    | `U` | `<uid>L<level>S<stamina>` | set your own user level & stamina (`<uid>` must be yours) | `U1L100S100` |
 
 </details>
 
@@ -65,10 +68,33 @@ Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
 
 - gacha is kinda broken if the banner doesnt have anything in staticdata
 
-- mirror dungeon, story dungeon, railway, refraction are not supported!!
+- story dungeon, railway, refraction are not supported!! mirror dungeon shops, gift
+  crafting and battle rewards are not either
 
 - etc.
 
+
+</details>
+
+## Hosting for friends
+
+<details>
+<summary>Let friends play on your server</summary>
+
+-- --
+
+Everyone gets their own save either way - Limbus has no multiplayer. Hosting only means your
+friends don't run a server themselves.
+
+- **Never port-forward 3000.** Put everyone on a private network instead: Tailscale (or plain
+  WireGuard). Add your machine's address on it to `host`, keeping `127.0.0.1` for yourself:
+  `"host": "127.0.0.1, 100.64.0.7"`. The server refuses every-interface binds (`0.0.0.0`, `::`)
+  and refuses non-local addresses unless `auth.requireToken` is true.
+- Auth codes are signed with a key made on first start (`myosotis.key`, beside `Config.json`).
+  Keep it private: whoever has it can sign in as anyone. Delete it to sign everyone out.
+- The mod menu (`/tweak`) only answers requests from the machine the server runs on.
+- Each friend's `myosotis.ini` points `server=` and `serverinfos_url=` at your private-network
+  address, with a `token=` of their own: the token *is* their account, like a password.
 
 </details>
 

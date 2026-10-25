@@ -72,9 +72,20 @@ public sealed class Config
 
 public sealed class ServerConfig
 {
+    /// <summary>
+    /// Address(es) to listen on, comma-separated. 127.0.0.1 keeps the server to this machine;
+    /// to let friends in, add this machine's address on a private network (a Tailscale or
+    /// WireGuard IP), e.g. "127.0.0.1, 100.64.0.7". Every-interface binds (0.0.0.0, ::) are
+    /// refused at start - they would put the server on whatever network the machine is on.
+    /// </summary>
     public string Host { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 3000;
     public string[] Versions { get; set; } = ["1.111.1"];
+
+    public string[] Hosts() =>
+        Host.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 }
 
 public sealed class DatabaseConfig
@@ -92,6 +103,9 @@ public sealed class StaticDataConfig
 public sealed class AuthConfig
 {
     public bool RequireToken { get; set; } = true;
+
+    /// <summary>The key auth codes are signed with, relative to Config.json; made on first start.</summary>
+    public string KeyPath { get; set; } = "myosotis.key";
 }
 
 public sealed class CommandConfig
@@ -148,9 +162,6 @@ public sealed class LoggingConfig
 
 public sealed class MirrorDungeonConfig
 {
-    /// <summary>Dungeon id the client uses for the current Mirror Dungeon.</summary>
-    public int DungeonId { get; set; } = 7;
-
     /// <summary>
     /// Diagnostic: lay out one node per candidate encounter-type value instead of a normal map,
     /// so the icons the client draws identify the unknown <c>e</c> enum. Leave off for play.

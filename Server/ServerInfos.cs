@@ -27,7 +27,7 @@ public class ServerInfosController(Config config) : ControllerBase
                 guestAuthErrors = [101, 15003, 40004, 40005],
                 enablePacketCrypt = true,
                 enableLogPacketCrypt = true,
-                enableAgreementVersionCheck = true,
+                enableAgreementVersionCheck = false,  // 1.117.1 looped on its terms check; nothing to agree to on a local server
                 enableNetworkingUIProcessPurchase = true,
                 enableCheckUpdateCatalogSteamFixed = true,
                 enableCheckUpdateCatalogToTitle = false,

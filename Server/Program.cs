@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using Common;
 using Database;
 using Database.Repositories;
@@ -9,6 +12,7 @@ using Serilog;
 using Serilog.Events;
 
 var config = Config.Load();
+TokenUtil.Init(config.ResolvePath(config.Auth.KeyPath));
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,8 +71,15 @@ Log.Information("Require token: {RequireToken}", config.Auth.RequireToken);
 Log.Information("Sync command allowed: {AllowSyncCommand}", config.Command.AllowSyncCommand);
 Log.Information("Reset DB command allowed: {AllowResetDbCommand}", config.Command.AllowResetDbCommand);
 
+var listen = ListenAddresses(config);
+foreach (var address in listen)
+    app.Urls.Add($"http://{(address.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{address}]" : address)}:{config.Server.Port}");
+
 app.Lifetime.ApplicationStarted.Register(() =>
-    Log.Information("Listening on http://{Host}:{Port}", config.Server.Host, config.Server.Port));
+{
+    foreach (var url in app.Urls)
+        Log.Information("Listening on {Url}", url);
+});
 
 app.Lifetime.ApplicationStopping.Register(() =>
     Log.Information("Application is shutting down..."));
@@ -96,4 +107,44 @@ if (config.Logging.LogBodies)
 app.UseMiddleware<UnknownPacketMiddleware>();
 app.UseMiddleware<AuthMiddleware>();
 app.MapControllers();
-app.Run($"http://{config.Server.Host}:{config.Server.Port}");
+app.Run();
+
+// The configured addresses this server can listen on now. Loopback always works; any other
+// address lets other machines in, so it has to be one this machine really has (its Tailscale or
+// WireGuard address) and tokens have to be required. Every-interface binds are refused outright.
+static List<IPAddress> ListenAddresses(Config config)
+{
+    var mine = NetworkInterface.GetAllNetworkInterfaces()
+        .SelectMany(n => n.GetIPProperties().UnicastAddresses.Select(a => a.Address))
+        .ToHashSet();
+    var result = new List<IPAddress>();
+    foreach (var host in config.Server.Hosts())
+    {
+        IPAddress? address = host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ? IPAddress.Loopback : null;
+        if (address is null && !IPAddress.TryParse(host.Trim('[', ']'), out address))
+            throw new InvalidOperationException(
+                $"server.host: '{host}' is not an IP address. List addresses, e.g. \"127.0.0.1, 100.64.0.7\".");
+        if (address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any))
+            throw new InvalidOperationException(
+                $"server.host: '{host}' would listen on every network this machine joins. "
+                + "Give this machine's Tailscale or WireGuard address instead.");
+        if (IPAddress.IsLoopback(address))
+        {
+            result.Add(address);
+            continue;
+        }
+        if (!config.Auth.RequireToken)
+            throw new InvalidOperationException(
+                $"server.host: '{host}' lets other machines in, so auth.requireToken has to be true.");
+        if (!mine.Contains(address))
+        {
+            Log.Warning("{Host} is not an address of this machine right now (is Tailscale up?); "
+                + "not listening on it until the server is restarted", host);
+            continue;
+        }
+        result.Add(address);
+    }
+    if (result.Count == 0)
+        throw new InvalidOperationException("server.host: none of the listed addresses can be listened on.");
+    return result.Distinct().ToList();
+}

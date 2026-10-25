@@ -9,9 +9,9 @@ public partial class ApiController
     /// Start a run: pick the theme floors, generate every floor's map, persist it and hand the
     /// whole save back to the client.
     ///
-    /// <c>idx</c> on the request is the difficulty: all four Mirror Dungeon variants share
-    /// dungeon id 7 and differ only by <c>typeIndex</c> — 0 normal and 1 hard are 5 floors,
-    /// 2 infinite is 10, 3 extreme is 15.
+    /// <c>idx</c> on the request is the difficulty: all four Mirror Dungeon variants of a
+    /// season share its dungeon id (7, then 8 from 1.117) and differ only by <c>typeIndex</c> —
+    /// 0 normal and 1 hard are 5 floors, 2 infinite is 10, 3 extreme is 15.
     /// </summary>
     [HttpPost("EnterMirrorDungeon")]
     public async Task<ActionResult<HttpResponseFormat<ResPacket_EnterMirrorDungeon>>> EnterMirrorDungeon(

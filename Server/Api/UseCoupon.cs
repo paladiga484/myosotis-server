@@ -190,7 +190,8 @@ public partial class ApiController
             case 'U':
                 {
                     var args = ExtractInts(code, 3);
-                    if (args[0] == 0)
+                    // the uid stays in the code for the old syntax, but only your own account is yours to change
+                    if (args[0] == 0 || args[0] != uid)
                         return Ok(UseCouponResponse(2, req.packetId));
 
                     await _users.UpdateAsync(args[0], args[1], stamina: args[2]);

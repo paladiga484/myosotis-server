@@ -38,9 +38,9 @@ public sealed record SeedDto(
     string Profile = "everything", string ItemProfile = "all");
 
 /// <summary>
-/// Local mod-menu UI. Deliberately NOT under /api/ so it bypasses AuthMiddleware: the
-/// server binds to 127.0.0.1. A browser on this machine can still be steered at it by any
-/// web page, though, so <see cref="LocalOnly"/> guards every route.
+/// Local mod-menu UI. Deliberately NOT under /api/ so it bypasses AuthMiddleware: it is for
+/// this machine only, and <see cref="LocalOnly"/> guards every route - against other machines
+/// when the server also listens for friends, and against web pages steering a local browser.
 /// </summary>
 [ApiController]
 [Route("tweak")]
@@ -434,15 +434,26 @@ public sealed class TweakController(
 }
 
 /// <summary>
-/// Requests have to name this server by its loopback address, so a page that points its
-/// own domain at 127.0.0.1 (DNS rebinding) is refused, and every write has to carry an
-/// X-Mirror header, which a page from anywhere else can't add without the server's
-/// consent (it never gives it) - so a stray link can't reset an account.
+/// Requests have to come from this machine - the menu lists every account's credential and
+/// can reset any of them, so a friend reaching the server over Tailscale must not get it. They
+/// also have to name this server by its loopback address, so a page that points its own domain
+/// at 127.0.0.1 (DNS rebinding) is refused, and every write has to carry an X-Mirror header,
+/// which a page from anywhere else can't add without the server's consent (it never gives it) -
+/// so a stray link can't reset an account.
 /// </summary>
 public sealed class LocalOnlyAttribute : Microsoft.AspNetCore.Mvc.Filters.ActionFilterAttribute
 {
     public override void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
     {
+        var remote = context.HttpContext.Connection.RemoteIpAddress;
+        if (remote is { IsIPv4MappedToIPv6: true })
+            remote = remote.MapToIPv4();
+        if (remote is null || !System.Net.IPAddress.IsLoopback(remote))
+        {
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
+            return;
+        }
+
         var request = context.HttpContext.Request;
         var host = request.Host.Host;
         if (host is not ("127.0.0.1" or "localhost" or "[::1]"))
