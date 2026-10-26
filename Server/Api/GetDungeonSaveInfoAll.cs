@@ -8,7 +8,8 @@ public partial class ApiController
 {
     [HttpPost("GetDungeonSaveInfoAll")]
     public async Task<ActionResult<HttpResponseFormat<ResPacket_GetDungeonSaveInfoAll>>> GetDungeonSaveInfoAll(
-        [FromBody] HttpRequestFormat<ReqPacket_GetDungeonSaveInfoAll> req)
+        [FromBody] HttpRequestFormat<ReqPacket_GetDungeonSaveInfoAll> req,
+        [FromServices] Database.Repositories.StoryDungeonRepository storySaves)
     {
         var mirrorDungeonIds = _mirrorData.Dungeons.Keys.Select(k => k.Id).Distinct().OrderBy(id => id).ToList();
 
@@ -27,7 +28,7 @@ public partial class ApiController
             state = "ok",
             result = new ResPacket_GetDungeonSaveInfoAll
             {
-                storySaveInfo = new StoryDungeonSaveInfoFormat(),
+                storySaveInfo = await storySaves.GetSaveAsync(uid) ?? new StoryDungeonSaveInfoFormat(),
                 mirrorOriginSaveInfo = mirrorSave,
                 storyMirrorSaveInfo = new StoryMirrorDungeonSaveInfoFormat
                 {

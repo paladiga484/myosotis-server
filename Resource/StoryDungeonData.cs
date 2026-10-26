@@ -45,6 +45,17 @@ public sealed class SdMap
         return null;
     }
 
+    /// <summary>A node's encounter ("start", "battle", "save", "boss"...), or "" if it isn't on the map.</summary>
+    public string Encounter(int nodeId)
+    {
+        var key = nodeId.ToString();
+        return floors.SelectMany(f => f.sectors.SelectMany(s => s.nodes)).FirstOrDefault(n => n.id == key)?.encounter ?? "";
+    }
+
+    /// <summary>The map's last node - every map ends on its boss: clearing it clears the dungeon.</summary>
+    public int Final() =>
+        floors.SelectMany(f => f.sectors.SelectMany(s => s.nodes)).Select(n => int.TryParse(n.id, out var i) ? i : 0).LastOrDefault();
+
     /// <summary>The node a run starts on (encounter "start"), else the first node.</summary>
     public (int Floor, int Sector, int Node) Start()
     {
