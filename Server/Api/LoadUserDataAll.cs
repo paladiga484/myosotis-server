@@ -11,15 +11,20 @@ public partial class ApiController
         [FromBody] HttpRequestFormat<ReqPacket_LoadUserDataAll> req)
     {
         var uid = HttpContext.GetUid();
+        // identities of our own (limbus-skins): granted while built, out of sight otherwise
+        var own = OwnIdentities.For(_config);
+        var active = own.Active(uid);
+        if (active.Count > 0 && (await _personalities.SyncNewAsync(uid, active.Select(o => o.Id).ToList())).Count > 0)
+            _db.Invalidate(uid);
         var snapshot = await _db.GetUserDataSnapshotAsync(uid);
 
         var updated = new UpdatedFormat
         {
             isInitialized = true,
             userInfo = snapshot.UserInfo,
-            personalityList = snapshot.Personalities,
+            personalityList = own.Visible(snapshot.Personalities, active),
             egoList = snapshot.Egos,
-            formationList = snapshot.Formations,
+            formationList = own.Formations(snapshot.Formations, active),
             lobbyCG = new LobbyCgFormat
             {
                 characterId = 1,
