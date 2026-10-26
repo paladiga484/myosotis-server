@@ -14,6 +14,21 @@ using Serilog.Events;
 var config = Config.Load();
 TokenUtil.Init(config.ResolvePath(config.Auth.KeyPath));
 
+string? gameDataNote = null;
+if (config.Launcher.Enabled && config.Launcher.ImportGameData)
+{
+    // the app shows this file if the server stops before it is up
+    var errorFile = config.ResolvePath("game-data-error.txt");
+    File.Delete(errorFile);
+    var why = Server.Launcher.GameData.Prepare(config, out gameDataNote);
+    if (why is not null)
+    {
+        File.WriteAllText(errorFile, why);
+        Console.Error.WriteLine(why);
+        Environment.Exit(3);
+    }
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog((_, cfg) => cfg
@@ -68,6 +83,8 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+if (gameDataNote is not null)
+    Log.Information("{Note}", gameDataNote);
 Log.Information("Supported versions: {Versions}", string.Join(", ", config.Server.Versions));
 Log.Information("Require token: {RequireToken}", config.Auth.RequireToken);
 Log.Information("Sync command allowed: {AllowSyncCommand}", config.Command.AllowSyncCommand);

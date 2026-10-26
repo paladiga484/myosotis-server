@@ -192,6 +192,12 @@ public sealed class LauncherConfig
     /// <summary>The same pair, set up for a friend's server.</summary>
     public string JoinDir { get; set; } = "../join";
 
+    /// <summary>
+    /// Read the game data from this PC's Limbus install (Unity's cache and the game folder)
+    /// into the folder above <c>staticData.path</c>, instead of shipping it in the package.
+    /// </summary>
+    public bool ImportGameData { get; set; }
+
     /// <summary>The app itself, started again to restart the server after a hosting change.</summary>
     public string AppPath { get; set; } = "../Limbus Private Server.exe";
 

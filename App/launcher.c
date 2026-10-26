@@ -30,6 +30,7 @@ static const wchar_t *TITLE = L"Limbus Private Server";
 static const wchar_t *URL = L"http://127.0.0.1:3000/launcher";
 
 static wchar_t here[MAX_PATH];                 /* this exe's folder, with a trailing backslash */
+static HANDLE server_proc;                     /* the server we started, to notice it quitting */
 
 static int exists(const wchar_t *path)
 {
@@ -58,11 +59,18 @@ static int server_up(void)
     return up;
 }
 
+static int server_quit(void)
+{
+    return server_proc && WaitForSingleObject(server_proc, 0) == WAIT_OBJECT_0;
+}
+
 static int wait_for(int up, int seconds)
 {
     for (int i = 0; i < seconds * 4; i++) {
         if (server_up() == up)
             return 1;
+        if (up && server_quit())
+            return 0;
         Sleep(250);
     }
     return 0;
@@ -85,7 +93,30 @@ static int start_server(void)
     if (!CreateProcessW(exe, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir, &si, &pi))
         return 0;
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    server_proc = pi.hProcess;
+    return 1;
+}
+
+/* The server couldn't read Limbus's own data (never started on this PC, say): it leaves the
+ * reason in server\game-data-error.txt. Shows it and returns 1, or 0 if there is none. */
+static int game_data_error(void)
+{
+    wchar_t path[MAX_PATH];
+    if (_snwprintf(path, MAX_PATH, L"%lsserver\\game-data-error.txt", here) < 0)
+        return 0;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return 0;
+    char buf[2048];
+    DWORD n = 0;
+    ReadFile(f, buf, sizeof buf - 1, &n, NULL);
+    CloseHandle(f);
+    wchar_t text[2048];
+    int len = MultiByteToWideChar(CP_UTF8, 0, buf, (int)n, text, 2047);
+    if (len <= 0)
+        return 0;
+    text[len] = 0;
+    MessageBoxW(NULL, text, TITLE, MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
     return 1;
 }
 
@@ -218,6 +249,8 @@ static int pump(DWORD ms, int up)
     while (GetTickCount() - start < ms) {
         if (up && server_up())
             return 1;
+        if (up && server_quit())
+            return 0;
         DWORD left = ms - (GetTickCount() - start);
         MsgWaitForMultipleObjects(0, NULL, FALSE, left < 250 ? left : 250, QS_ALLINPUT);
         MSG m;
@@ -294,6 +327,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show)
             splash_open(inst);
         if (!(splash ? pump(90000, 1) : wait_for(1, 90))) {
             splash_close();
+            if (game_data_error())
+                return 1;
             say(L"The server didn't start.\n\nAnother program may be using port 3000, or the folder "
                 L"was only partly unzipped. The server's log is in server\\logs.");
             return 1;
