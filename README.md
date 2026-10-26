@@ -6,6 +6,47 @@ For a better and more complete private server, you can use https://github.com/LE
 
 Don't forget to join the lethe discord: https://discord.com/invite/XjsaUNwU
 
+## Quick start: the ready-made packages
+
+No .NET, no building. Download the package for your system from
+[Releases](https://github.com/paladiga484/myosotis-server/releases/latest). Each one is made for
+one Limbus version (it's in the name). Nothing of the game ships in it: on the first start the
+server reads the game's data from your own Limbus install, and your Steam copy is never modified.
+
+Before either: install Limbus through Steam and start it once, up to the title screen.
+
+**Windows**
+
+1. Unzip `LimbusPrivateServer-Windows-<version>.zip` somewhere normal (Desktop, Documents).
+2. Double-click **Limbus Private Server**. If Windows says "Windows protected your PC", click
+   More info, then Run anyway (the app isn't signed).
+3. Press **Play**. The window shows each step and says when you're on your own server.
+4. **Mod menu** at the bottom edits your save: identities, E.G.O., items, cosmetics.
+
+**Linux** (Steam with Proton)
+
+```sh
+tar xzf LimbusPrivateServer-Linux-<version>.tar.gz
+cd LimbusPrivateServer
+./play.sh check     # finds Steam, Limbus, its Proton prefix and Proton; changes nothing
+./play.sh           # starts the server, Limbus, then attaches the patch
+./play.sh menu      # the mod menu, while it runs
+```
+
+Leave the terminal open while you play; closing Limbus stops the server.
+
+**A friend's server**: install Tailscale on both computers. On Windows, fill in the card "A
+friend's server" in the app; on Linux, `./play.sh friend 100.x.y.z your-secret-token`, then
+`./play.sh join`. Never open a port on your router. Each package's README.txt covers hosting,
+what works and what to do when something breaks.
+
+**Skins** (optional): [limbus-skins](https://github.com/paladiga484/limbus-skins) dresses
+identities as the bosses and characters they mirror. With it installed:
+`limbus-skins run --yes -- ./play.sh` (Linux) or
+`limbus-skins run --yes -- "<folder>\Limbus Private Server.exe"` (Windows).
+
+Check a download against the `.sha256` file beside it: `sha256sum -c <file>.sha256`.
+
 ## General Showcase
 
 <details>
