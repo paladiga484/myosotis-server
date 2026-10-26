@@ -84,9 +84,20 @@ public sealed class TweakController(
         ["gate"] = ("blackforest-gate.png", "image/png"),
         ["backdrop"] = ("blackforest-jumpscare.png", "image/png"),
         ["cry"] = ("blackforest-cry.ogg", "audio/ogg"),
+        ["clip"] = ("blackforest-jumpscare.webm", "video/webm"),
     };
 
-    /// <summary>The gate's art and the bird's cry, from this machine only: BLACKFOREST_DIR,
+    /// <summary>The Windows app's jumpscare: Edge opens this fullscreen when Greencliff dies.</summary>
+    [HttpGet("blackforest/scare")]
+    public ContentResult ForestScare() => Content("""
+        <!doctype html><meta charset="utf-8"><title>The Black Forest</title>
+        <style>html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+        video{width:100%;height:100%;object-fit:cover}</style>
+        <video src="/tweak/blackforest/clip" autoplay playsinline></video>
+        <script>const v=document.querySelector("video");v.onended=v.onerror=()=>window.close();</script>
+        """, "text/html; charset=utf-8");
+
+    /// <summary>The gate's art, the bird's cry and the jumpscare, from this machine only: BLACKFOREST_DIR,
     /// the art folder beside the server (Linux), or blackforest/ beside Config.json (Windows).
     /// None of it ships with the server.</summary>
     [HttpGet("blackforest/{name}")]

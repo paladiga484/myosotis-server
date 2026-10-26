@@ -126,6 +126,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 if (config.Logging.LogBodies)
     app.UseMiddleware<BodyLoggingMiddleware>();
 
+Server.BlackForestWatcher.Start(config, app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("BlackForest"));
+
 app.UseMiddleware<UnknownPacketMiddleware>();
 app.UseMiddleware<AuthMiddleware>();
 app.MapControllers();
