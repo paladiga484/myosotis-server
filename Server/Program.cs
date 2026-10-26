@@ -15,7 +15,7 @@ var config = Config.Load();
 TokenUtil.Init(config.ResolvePath(config.Auth.KeyPath));
 
 string? gameDataNote = null;
-if (config.Launcher.Enabled && config.Launcher.ImportGameData)
+if (config.Launcher.ImportGameData)                    // the packages: Windows (with the app) and Linux
 {
     // the app shows this file if the server stops before it is up
     var errorFile = config.ResolvePath("game-data-error.txt");

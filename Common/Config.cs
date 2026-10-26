@@ -195,6 +195,8 @@ public sealed class LauncherConfig
     /// <summary>
     /// Read the game data from this PC's Limbus install (Unity's cache and the game folder)
     /// into the folder above <c>staticData.path</c>, instead of shipping it in the package.
+    /// Works with the app window off too (the Linux package); MYOSOTIS_UNITY_CACHE and
+    /// MYOSOTIS_GAME_DIR say where those are when they aren't in their Windows places.
     /// </summary>
     public bool ImportGameData { get; set; }
 
