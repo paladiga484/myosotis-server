@@ -83,6 +83,9 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+// limbus-skins' Black Forest unlock follows what is open, from the start
+Server.BlackForest.For(config);
+
 if (gameDataNote is not null)
     Log.Information("{Note}", gameDataNote);
 Log.Information("Supported versions: {Versions}", string.Join(", ", config.Server.Versions));

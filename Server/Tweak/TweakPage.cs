@@ -339,8 +339,8 @@ public static class TweakPage
       </div>
       <div class="within hide" id="forestwithin" style="background-image:url(tweak/blackforest/backdrop)">
         <h2>The Black Forest</h2>
-        <p>Greencliff fell, and took everyone with him. Gebura and the green sinners will wait here,
-           once they exist.</p>
+        <p>Greencliff fell. Gebura, the Red Mist, came out of the forest with you: from your next
+           launch she fights as Red Eyes &amp; Penitence Ryōshū. Seal the gate and she goes back.</p>
         <button class="btn tonal" id="sealforest">Seal the gate</button>
       </div>
       <audio id="forestcry" src="tweak/blackforest/cry" preload="none"></audio>

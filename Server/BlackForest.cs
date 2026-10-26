@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Common;
 
 namespace Server;
@@ -35,6 +36,7 @@ public sealed class BlackForest
         {
             // first run, or a damaged file: everyone starts outside the forest
         }
+        SyncUnlock();
     }
 
     public static BlackForest For(Config config)
@@ -78,6 +80,7 @@ public sealed class BlackForest
             _open.Add(_lastLocalBattler);
             _pendingWin.Add(_lastLocalBattler);
             Save();
+            SyncUnlock();
             return _lastLocalBattler;
         }
     }
@@ -107,6 +110,61 @@ public sealed class BlackForest
             _open.Remove(uid);
             _pendingWin.Remove(uid);
             Save();
+            SyncUnlock();
+        }
+    }
+
+    // What the forest gives: limbus-skins keeps skins marked "unlock": "black-forest" out of
+    // sight until its state lists that word. Open for any account: unlocked, and the rewards are
+    // switched on the first time. Every gate sealed: locked, and they're switched off again.
+    const string Unlock = "black-forest";
+    static readonly string[] Rewards = ["gebura"];
+
+    static bool Holds(JsonArray a, string s) =>
+        a.Any(x => x is JsonValue v && v.TryGetValue<string>(out var t) && t == s);
+
+    static void Drop(JsonArray a, string s)
+    {
+        for (var i = a.Count - 1; i >= 0; i--)
+            if (a[i] is JsonValue v && v.TryGetValue<string>(out var t) && t == s)
+                a.RemoveAt(i);
+    }
+
+    void SyncUnlock()
+    {
+        var path = BlackForestScare.SkinsStatePath();
+        if (!File.Exists(path))
+            return;                                         // limbus-skins isn't set up on this machine
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(path)) is not JsonObject root)
+                return;
+            var unlocked = root["unlocked"] as JsonArray ?? [];
+            var on = root["on"] as JsonArray ?? [];
+            var want = _open.Count > 0;
+            if (Holds(unlocked, Unlock) == want)
+                return;
+            if (want)
+            {
+                unlocked.Add(Unlock);
+                foreach (var r in Rewards.Where(r => !Holds(on, r)))
+                    on.Add(r);
+            }
+            else
+            {
+                Drop(unlocked, Unlock);
+                foreach (var r in Rewards)
+                    Drop(on, r);
+            }
+            root["unlocked"] = unlocked.Parent is null ? unlocked : unlocked.DeepClone();
+            root["on"] = on.Parent is null ? on : on.DeepClone();
+            var tmp = path + ".server.tmp";
+            File.WriteAllText(tmp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // leave limbus-skins' state as it was rather than fail a battle request
         }
     }
 
@@ -141,15 +199,20 @@ public sealed class BlackForest
 /// </summary>
 public static class BlackForestScare
 {
-    public static bool Armed()
+    /// <summary>limbus-skins' state.json (which skins are on, what is unlocked).</summary>
+    public static string SkinsStatePath()
     {
         var state = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_STATE");
-        if (string.IsNullOrEmpty(state))
-            state = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "limbus-skins", "state.json");
+        return string.IsNullOrEmpty(state)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "limbus-skins", "state.json")
+            : state;
+    }
+
+    public static bool Armed()
+    {
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(state));
+            using var doc = JsonDocument.Parse(File.ReadAllText(SkinsStatePath()));
             return doc.RootElement.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.Array
                 && on.EnumerateArray().Any(x => x.ValueKind == JsonValueKind.String && x.GetString() == "greencliff");
         }
