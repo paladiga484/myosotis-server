@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Common;
 
@@ -6,7 +5,7 @@ namespace Server;
 
 /// <summary>
 /// The Black Forest: when Greencliff (a limbus-skins skin) dies in a fight on this machine, the
-/// watcher beside the game reports it. That account's fight counts as won, and the gate to the
+/// client patch reports it. That account's fight counts as won, and the gate to the
 /// hidden page of the mod menu opens for it. Kept in blackforest.json beside Config.json, not
 /// in the database, so nothing about the save format changes.
 /// </summary>
@@ -122,115 +121,17 @@ public sealed class BlackForest
 }
 
 /// <summary>
-/// The Windows app's half of the Black Forest (on Linux, blackforest.py beside patchlc does it).
-/// Follows Limbus's Player.log; "cannot find idbattle_dead_10701_1" is the moment LCB Heathcliff
-/// dies. While limbus-skins has greencliff on, that opens the gate and plays the jumpscare in an
-/// Edge window over the game.
+/// What a fall sets off on this machine. The client patch (myosotis BlackForestPatch) reports
+/// Greencliff's death the moment BattleUnitModel_Player.OnDie runs for body 10701_*; this decides
+/// whether it counts (limbus-skins has greencliff on) and plays the jumpscare: mpv with
+/// art/blackforest-jumpscare.mp4 on Linux, Edge fullscreen on the WebM page on Windows.
 ///
-/// Overrides, for tests: MYOSOTIS_PLAYER_LOG (the log; also starts the watcher off Windows),
-/// MYOSOTIS_SKINS_STATE (limbus-skins' state.json), MYOSOTIS_SCARE_CMD (run instead of Edge).
+/// Overrides, for tests: MYOSOTIS_SKINS_STATE (limbus-skins' state.json), MYOSOTIS_SCARE_CMD
+/// (run with the clip page's URL instead of a player).
 /// </summary>
-public static partial class BlackForestWatcher
+public static class BlackForestScare
 {
-    [System.Text.RegularExpressions.GeneratedRegex(@"cannot find idbattle_dead_10701_\d")]
-    private static partial System.Text.RegularExpressions.Regex Death();
-
-    const int QuietSeconds = 30;
-
-    public static void Start(Config config, ILogger log)
-    {
-        var path = Environment.GetEnvironmentVariable("MYOSOTIS_PLAYER_LOG");
-        if (string.IsNullOrEmpty(path))
-        {
-            if (!(OperatingSystem.IsWindows() && config.Launcher.Enabled))
-                return;
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            path = Path.Combine(home, "AppData", "LocalLow", "ProjectMoon", "LimbusCompany", "Player.log");
-        }
-        var thread = new Thread(() => Run(config, log, path)) { IsBackground = true, Name = "black forest" };
-        thread.Start();
-        log.LogInformation("The Black Forest watches {Log}", path);
-    }
-
-    static void Run(Config config, ILogger log, string path)
-    {
-        var last = DateTime.MinValue;
-        foreach (var line in Follow(path))
-        {
-            if (!Death().IsMatch(line) || !Armed())
-                continue;
-            if ((DateTime.UtcNow - last).TotalSeconds < QuietSeconds)
-                continue;
-            last = DateTime.UtcNow;
-            var uid = BlackForest.For(config).Fell();
-            log.LogInformation("Greencliff fell; the Black Forest opened for uid {Uid}", uid);
-            try
-            {
-                Scare(config);
-            }
-            catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
-            {
-                log.LogWarning("The jumpscare couldn't play: {Error}", e.Message);
-            }
-        }
-    }
-
-    /// <summary>New lines of a log Unity rewrites on every start: from its end the first time,
-    /// from the top of each new one. Never ends.</summary>
-    static IEnumerable<string> Follow(string path)
-    {
-        FileStream? fs = null;
-        StreamReader? reader = null;
-        long pos = 0;
-        var created = DateTime.MinValue;
-        var first = true;
-        var pending = new StringBuilder();
-        while (true)
-        {
-            var info = new FileInfo(path);
-            // a new game session rewrites the log: it shrinks, and on Windows it is a new file
-            // (elsewhere the creation time can follow the last write, so it can't tell)
-            if (info.Exists && (fs is null || info.Length < pos
-                                || (OperatingSystem.IsWindows() && info.CreationTimeUtc != created)))
-            {
-                reader?.Dispose();
-                fs?.Dispose();
-                try
-                {
-                    fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                }
-                catch (IOException)
-                {
-                    fs = null;
-                    Thread.Sleep(250);
-                    continue;
-                }
-                created = info.CreationTimeUtc;
-                pos = first ? fs.Length : 0;
-                fs.Position = pos;
-                reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: false);
-                pending.Clear();
-            }
-            first = false;
-            string? chunk = reader is null ? null : reader.ReadToEnd();
-            if (!string.IsNullOrEmpty(chunk))
-            {
-                pos = fs!.Position;
-                pending.Append(chunk);
-                var text = pending.ToString();
-                var cut = text.LastIndexOf('\n');
-                if (cut >= 0)
-                {
-                    pending.Clear().Append(text[(cut + 1)..]);       // a half-written line waits
-                    foreach (var line in text[..cut].Split('\n'))
-                        yield return line;
-                }
-            }
-            Thread.Sleep(250);
-        }
-    }
-
-    static bool Armed()
+    public static bool Armed()
     {
         var state = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_STATE");
         if (string.IsNullOrEmpty(state))
@@ -248,23 +149,51 @@ public static partial class BlackForestWatcher
         }
     }
 
-    /// <summary>Edge, fullscreen and without chrome, on the page that plays the clip; closed once
-    /// the clip has had time to end.</summary>
-    static void Scare(Config config)
+    /// <summary>Plays the jumpscare. Null when it started, else why not.</summary>
+    public static string? Play(Config config, string? clip)
     {
-        var url = $"http://127.0.0.1:{config.Server.Port}/tweak/blackforest/scare";
-        var test = Environment.GetEnvironmentVariable("MYOSOTIS_SCARE_CMD");
-        if (!string.IsNullOrEmpty(test))
+        var page = $"http://127.0.0.1:{config.Server.Port}/tweak/blackforest/scare";
+        try
         {
-            System.Diagnostics.Process.Start(test, url)?.Dispose();
-            return;
+            var test = Environment.GetEnvironmentVariable("MYOSOTIS_SCARE_CMD");
+            if (!string.IsNullOrEmpty(test))
+            {
+                System.Diagnostics.Process.Start(test, page)?.Dispose();
+                return null;
+            }
+            if (OperatingSystem.IsWindows())
+                return Edge(page);
+            if (clip is null)
+                return "no blackforest-jumpscare.mp4 to play";
+            // --no-config: a keep-open in the player's mpv.conf would hold the last frame over the game
+            var psi = new System.Diagnostics.ProcessStartInfo("mpv") { UseShellExecute = false };
+            foreach (var a in new[]
+                     {
+                         "--no-config", "--keep-open=no", "--fs", "--ontop", "--no-border", "--no-osc",
+                         "--no-osd-bar", "--no-input-default-bindings", "--input-vo-keyboard=no", "--really-quiet",
+                         "--title=The Black Forest", "--force-window=immediate", clip,
+                     })
+                psi.ArgumentList.Add(a);
+            System.Diagnostics.Process.Start(psi)?.Dispose();
+            return null;
         }
-        var edge = FindEdge() ?? throw new InvalidOperationException("Microsoft Edge wasn't found");
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return e.Message;
+        }
+    }
+
+    /// <summary>Edge in kiosk mode on its own profile, closed once the clip has had time to end.</summary>
+    static string? Edge(string page)
+    {
+        var edge = FindEdge();
+        if (edge is null)
+            return "Microsoft Edge wasn't found";
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var psi = new System.Diagnostics.ProcessStartInfo(edge) { UseShellExecute = false };
         foreach (var a in new[]
                  {
-                     "--kiosk", url, "--edge-kiosk-type=fullscreen",
+                     "--kiosk", page, "--edge-kiosk-type=fullscreen",
                      $"--user-data-dir={Path.Combine(local, "LimbusPrivateServer", "blackforest")}",
                      "--autoplay-policy=no-user-gesture-required", "--no-first-run", "--no-default-browser-check",
                      "--disable-sync", "--disable-background-networking", "--disable-breakpad",
@@ -273,7 +202,7 @@ public static partial class BlackForestWatcher
             psi.ArgumentList.Add(a);
         var p = System.Diagnostics.Process.Start(psi);
         if (p is null)
-            return;
+            return "Edge didn't start";
         _ = Task.Delay(TimeSpan.FromSeconds(6)).ContinueWith(_ =>
         {
             try
@@ -286,6 +215,7 @@ public static partial class BlackForestWatcher
             }
             p.Dispose();
         });
+        return null;
     }
 
     static string? FindEdge()
