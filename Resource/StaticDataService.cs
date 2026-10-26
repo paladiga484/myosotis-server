@@ -14,6 +14,7 @@ public sealed class StaticDataService
     private readonly ILogger<StaticDataService> _logger;
 
     private IReadOnlyList<int> _personalityIds = [];
+    private IReadOnlySet<int> _personalitySet = new HashSet<int>();
     private IReadOnlyList<int> _egoIds = [];
     private IReadOnlyList<int> _itemIds = [];
     private IReadOnlyList<int> _announcerIds = [];
@@ -35,6 +36,8 @@ public sealed class StaticDataService
     }
 
     public IReadOnlyList<int> PersonalityIds => _personalityIds;
+    /// <summary>The same ids, for lookups.</summary>
+    public IReadOnlySet<int> KnownPersonalities => _personalitySet;
     public IReadOnlyList<int> EgoIds => _egoIds;
     public IReadOnlyList<int> ItemIds => _itemIds;
     public IReadOnlyList<int> AnnouncerIds => _announcerIds;
@@ -113,6 +116,7 @@ public sealed class StaticDataService
     public async Task LoadAllAsync()
     {
         _personalityIds = await LoadIdsAsync("personality");
+        _personalitySet = _personalityIds.ToHashSet();
         _personalitySeasons = await LoadPersonalitySeasonsAsync();
         _egoIds = await LoadIdsAsync("ego");
         _itemIds = await LoadIdsAsync("item");

@@ -14,7 +14,10 @@ public partial class ApiController
         var forest = BlackForest.For(_config);
         var iswin = forest.TakeWin(uid) || req.parameters.iswin;
         forest.EndBattle(uid);
-        var formation = await _formations.GetAsync(uid, req.parameters.formationid);
+        var stored = await _formations.GetAsync(uid, req.parameters.formationid);
+        // a hidden identity of our own (limbus-skins) is shown as the sinner's default here too
+        var formation = stored is null ? null : OwnIdentities.Formations(
+            [stored], OwnIdentities.Active(_config, uid, BlackForest.IsLocal(HttpContext)), _staticData.KnownPersonalities)[0];
         var levels = await _personalities.GetLevelsAsync(
             uid, formation?.formationDetails.Select(d => d.personalityId).ToList() ?? []);
 

@@ -510,8 +510,6 @@ Resource/LiveStaticData.new/
 # which accounts opened the Black Forest (Server/BlackForest.cs)
 blackforest.json
 blackforest.json.tmp
-own-identities.json
-own-identities.json.tmp
 
 # the mod menu's look (Server/Tweak/Look.cs)
 theme.json

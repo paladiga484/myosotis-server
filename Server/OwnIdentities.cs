@@ -1,151 +1,101 @@
 using System.Text.Json;
-using Common;
 using Types.Server;
 
 namespace Server;
 
 /// <summary>
 /// Identities of our own (limbus-skins "identity" skins: Vergilius as 10799, Kali as 10499): new
-/// ids cloned into the client's static data. They exist only while limbus-skins has them built
-/// (its helpers manifest lists them), so the server grants them then - Kali only to an account
-/// whose Black Forest is open - and otherwise keeps them out of what the client sees: a client
-/// without them in its data would trip over an id it doesn't know. Nothing is deleted; every id
-/// ever seen is remembered in own-identities.json with its base, so a formation slot holding a
-/// hidden one shows the identity it was cloned from instead.
+/// ids cloned into the client's static data. Only a client that has them may see them, so they
+/// are granted only while all of this holds:
+///   - a limbus-skins session is applied on this machine (its active.json lists the shared
+///     static-data file, which carries the clones) and its helpers manifest lists them;
+///   - the request comes from this machine (a friend's client over Tailscale has stock files);
+///   - for Kali, the account's Black Forest is open.
+/// Otherwise every id the server's own game data doesn't know is kept out of what the client
+/// sees - failing closed, with no memory to lose - and a formation slot or battle result holding
+/// one shows the sinner's default identity. Nothing is ever deleted from the save.
 ///
 /// Override for tests: MYOSOTIS_SKINS_DATA (limbus-skins' data folder).
 /// </summary>
-public sealed class OwnIdentities
+public static class OwnIdentities
 {
     public sealed record Own(int Id, int Base, string? Unlock);
 
-    static readonly object Gate = new();
-    static OwnIdentities? _instance;
-
-    readonly Config _config;
-    readonly string _knownPath;
-    readonly Dictionary<int, int> _known = [];
-
-    OwnIdentities(Config config)
+    static string DataDir()
     {
-        _config = config;
-        _knownPath = config.ResolvePath("own-identities.json");
+        var data = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_DATA");
+        return string.IsNullOrEmpty(data)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "limbus-skins")
+            : data;
+    }
+
+    /// <summary>A limbus-skins session has the shared static-data file swapped in right now.</summary>
+    static bool SessionApplied()
+    {
         try
         {
-            var saved = JsonSerializer.Deserialize<Dictionary<int, int>>(File.ReadAllText(_knownPath));
-            if (saved is not null)
-                foreach (var (id, b) in saved)
-                    _known[id] = b;
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(DataDir(), "active.json")));
+            return doc.RootElement.TryGetProperty("mods", out var mods) && mods.ValueKind == JsonValueKind.Array
+                && mods.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.String && m.GetString() == "helpers");
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
         {
-            // first run: none seen yet
+            return false;                                  // no session: stock files
         }
-    }
-
-    public static OwnIdentities For(Config config)
-    {
-        lock (Gate)
-            return _instance ??= new OwnIdentities(config);
-    }
-
-    /// <summary>For tests: forget the loaded state.</summary>
-    public static void Reset()
-    {
-        lock (Gate)
-            _instance = null;
-    }
-
-    static string ManifestPath()
-    {
-        var data = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_DATA");
-        if (string.IsNullOrEmpty(data))
-            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "limbus-skins");
-        return Path.Combine(data, "built", "helpers", "manifest.json");
     }
 
     static List<Own> Built()
     {
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(DataDir(), "built", "helpers", "manifest.json")));
             if (!doc.RootElement.TryGetProperty("identities", out var list) || list.ValueKind != JsonValueKind.Array)
                 return [];
             var out_ = new List<Own>();
             foreach (var e in list.EnumerateArray())
-                if (e.TryGetProperty("id", out var id) && id.TryGetInt32(out var i)
+                if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("id", out var id) && id.TryGetInt32(out var i)
                     && e.TryGetProperty("base", out var b) && b.TryGetInt32(out var bi))
-                    out_.Add(new Own(i, bi, e.TryGetProperty("unlock", out var u) ? u.GetString() : null));
+                    out_.Add(new Own(i, bi, e.TryGetProperty("unlock", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null));
             return out_;
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
         {
-            return [];                                     // limbus-skins not set up here, or nothing built
+            return [];
         }
     }
 
-    /// <summary>The ones this account has right now (and remembers every id seen).</summary>
-    public List<Own> Active(long uid)
+    /// <summary>The ids this request's client has right now (empty for another machine's).</summary>
+    public static HashSet<int> Active(Common.Config config, long uid, bool local)
     {
-        var built = Built();
-        lock (Gate)
-        {
-            var grew = false;
-            foreach (var o in built)
-                if (!_known.TryGetValue(o.Id, out var b) || b != o.Base)
-                {
-                    _known[o.Id] = o.Base;
-                    grew = true;
-                }
-            if (grew)
-                Save();
-        }
-        return built.Where(o => o.Unlock is null || (o.Unlock == "black-forest" && BlackForest.For(_config).IsOpen(uid))).ToList();
+        if (!local || !SessionApplied())
+            return [];
+        return Built()
+            .Where(o => o.Unlock is null || (o.Unlock == "black-forest" && BlackForest.For(config).IsOpen(uid)))
+            .Select(o => o.Id)
+            .ToHashSet();
     }
 
-    /// <summary>The personalities the client may see: none of ours that isn't active.</summary>
-    public List<PersonalityFormat> Visible(List<PersonalityFormat> all, IReadOnlyCollection<Own> active)
-    {
-        var shown = active.Select(o => o.Id).ToHashSet();
-        lock (Gate)
-            return all.Where(p => !_known.ContainsKey(p.personality_id) || shown.Contains(p.personality_id)).ToList();
-    }
+    /// <summary>The id the client may be shown in place of `id`: itself if the game data knows it
+    /// or it's active, else the sinner's default identity (1SS01).</summary>
+    public static int Shown(int id, IReadOnlySet<int> active, IReadOnlySet<int> known) =>
+        known.Contains(id) || active.Contains(id) ? id : id / 100 * 100 + 1;
 
-    /// <summary>Formations as the client may see them: a slot holding one of ours that isn't active
-    /// shows its base. The stored formation is left as it is (copies are made where needed).</summary>
-    public List<FormationFormat> Formations(List<FormationFormat> all, IReadOnlyCollection<Own> active)
-    {
-        var shown = active.Select(o => o.Id).ToHashSet();
-        Dictionary<int, int> known;
-        lock (Gate)
-            known = new Dictionary<int, int>(_known);
-        bool Hidden(int id) => known.ContainsKey(id) && !shown.Contains(id);
-        return all.Select(f => !f.formationDetails.Any(d => Hidden(d.personalityId)) ? f : new FormationFormat
+    public static List<PersonalityFormat> Visible(List<PersonalityFormat> all, IReadOnlySet<int> active, IReadOnlySet<int> known) =>
+        all.Where(p => known.Contains(p.personality_id) || active.Contains(p.personality_id)).ToList();
+
+    /// <summary>Formations as the client may see them; the stored ones are left as they are.</summary>
+    public static List<FormationFormat> Formations(List<FormationFormat> all, IReadOnlySet<int> active, IReadOnlySet<int> known) =>
+        all.Select(f => f.formationDetails.All(d => Shown(d.personalityId, active, known) == d.personalityId) ? f : new FormationFormat
         {
             id = f.id,
             formationNameFormat = f.formationNameFormat,
-            formationDetails = f.formationDetails.Select(d => !Hidden(d.personalityId) ? d : new FormationDetailFormat
+            formationDetails = f.formationDetails.Select(d => new FormationDetailFormat
             {
-                personalityId = known[d.personalityId],
+                personalityId = Shown(d.personalityId, active, known),
                 egos = d.egos,
                 isParticipated = d.isParticipated,
                 participationOrder = d.participationOrder,
                 skinId = d.skinId,
             }).ToList(),
         }).ToList();
-    }
-
-    void Save()
-    {
-        // a failed write keeps the map in memory: never fail the login it rides on
-        try
-        {
-            var tmp = _knownPath + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(_known.OrderBy(kv => kv.Key).ToDictionary()));
-            File.Move(tmp, _knownPath, overwrite: true);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-        }
-    }
 }

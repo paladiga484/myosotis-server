@@ -11,10 +11,10 @@ public partial class ApiController
         [FromBody] HttpRequestFormat<ReqPacket_LoadUserDataAll> req)
     {
         var uid = HttpContext.GetUid();
-        // identities of our own (limbus-skins): granted while built, out of sight otherwise
-        var own = OwnIdentities.For(_config);
-        var active = own.Active(uid);
-        if (active.Count > 0 && (await _personalities.SyncNewAsync(uid, active.Select(o => o.Id).ToList())).Count > 0)
+        // identities of our own (limbus-skins): granted while this client has them, out of sight otherwise
+        var active = OwnIdentities.Active(_config, uid, BlackForest.IsLocal(HttpContext));
+        var known = _staticData.KnownPersonalities;
+        if (active.Count > 0 && (await _personalities.SyncNewAsync(uid, active.ToList())).Count > 0)
             _db.Invalidate(uid);
         var snapshot = await _db.GetUserDataSnapshotAsync(uid);
 
@@ -22,9 +22,9 @@ public partial class ApiController
         {
             isInitialized = true,
             userInfo = snapshot.UserInfo,
-            personalityList = own.Visible(snapshot.Personalities, active),
+            personalityList = OwnIdentities.Visible(snapshot.Personalities, active, known),
             egoList = snapshot.Egos,
-            formationList = own.Formations(snapshot.Formations, active),
+            formationList = OwnIdentities.Formations(snapshot.Formations, active, known),
             lobbyCG = new LobbyCgFormat
             {
                 characterId = 1,

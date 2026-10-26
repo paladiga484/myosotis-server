@@ -11,7 +11,10 @@ public partial class ApiController
         [FromBody] HttpRequestFormat<ReqPacket_ExitExpDungeon> req)
     {
         var uid = HttpContext.GetUid();
-        var formation = await _formations.GetAsync(uid, req.parameters.formationId);
+        var stored = await _formations.GetAsync(uid, req.parameters.formationId);
+        // a hidden identity of our own (limbus-skins) is shown as the sinner's default here too
+        var formation = stored is null ? null : OwnIdentities.Formations(
+            [stored], OwnIdentities.Active(_config, uid, BlackForest.IsLocal(HttpContext)), _staticData.KnownPersonalities)[0];
         var levels = await _personalities.GetLevelsAsync(
             uid, formation?.formationDetails.Select(d => d.personalityId).ToList() ?? []);
 
