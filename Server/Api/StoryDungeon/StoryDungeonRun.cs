@@ -16,7 +16,9 @@ public partial class ApiController
     }
 
     /// <summary>A new run on the map of <c>stageid</c> (the dungeon id), starting at its start node
-    /// with the team the client sends. A stage the static data has no map for is refused.</summary>
+    /// with the team the client sends. A stage the static data has no map for is refused. A run
+    /// in progress is never replaced: the same dungeon again (a retry) gets that run back,
+    /// another dungeon waits until <c>ExitStoryDungeon</c>.</summary>
     [HttpPost("EnterStoryDungeon")]
     public async Task<ActionResult<HttpResponseFormat<ResPacket_EnterStoryDungeon>>> EnterStoryDungeon(
         [FromBody] HttpRequestFormat<ReqPacket_EnterStoryDungeon> req,
@@ -29,6 +31,15 @@ public partial class ApiController
         {
             _logger.LogWarning("EnterStoryDungeon uid={Uid}: no story dungeon map for stage {Stage} / node {Node}", uid, p.stageid, p.nodeid);
             return StatusCode(StatusCodes.Status400BadRequest);
+        }
+        if (await saves.GetSaveAsync(uid) is { } running)
+        {
+            if (running.dungeonid != map.id)
+            {
+                _logger.LogWarning("EnterStoryDungeon uid={Uid}: dungeon {Dungeon} refused, {Running} is still in progress", uid, map.id, running.dungeonid);
+                return StatusCode(StatusCodes.Status400BadRequest);
+            }
+            return StoryOk(new ResPacket_EnterStoryDungeon { saveInfo = running, nodesRecord = await saves.GetRecordAsync(uid, map.id) }, req.packetId);
         }
         var (floor, sector, node) = map.Start();
         var save = new StoryDungeonSaveInfoFormat
