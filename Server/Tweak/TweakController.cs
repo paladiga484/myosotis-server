@@ -149,6 +149,53 @@ public sealed class TweakController(
         return Ok(new { open = false });
     }
 
+    // ── how the pages look ──────────────────────────────────────────────────────────────
+
+    [HttpGet("api/theme")]
+    public IActionResult GetTheme() => Ok(Look.Load(config));
+
+    [HttpPost("api/theme")]
+    public IActionResult SetTheme([FromBody] Look.Theme t)
+    {
+        var keep = Look.Load(config);
+        t = t with { Picture = keep.Picture };                      // only the upload changes the picture
+        if (!Look.Valid(t))
+            return BadRequest(new { error = "background must be black, white, colour or picture; colours #rrggbb" });
+        Look.Save(config, t);
+        return Ok(t);
+    }
+
+    /// <summary>The picture behind the pages: the request body, PNG, JPEG or WebP, up to 8 MB.</summary>
+    [HttpPost("api/theme/picture")]
+    [RequestSizeLimit(Look.MaxPicture + 1)]
+    public async Task<IActionResult> SetPicture()
+    {
+        using var ms = new MemoryStream();
+        await Request.Body.CopyToAsync(ms);
+        if (ms.Length > Look.MaxPicture)
+            return BadRequest(new { error = "pictures can be up to 8 MB" });
+        var bytes = ms.ToArray();
+        if (Look.PictureType(bytes) is null)
+            return BadRequest(new { error = "that isn't a PNG, JPEG or WebP picture" });
+        await System.IO.File.WriteAllBytesAsync(config.ResolvePath("theme-picture"), bytes);
+        var t = Look.Load(config) with { Bg = "picture", Picture = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+        Look.Save(config, t);
+        return Ok(t);
+    }
+
+    [HttpGet("theme/picture")]
+    public IActionResult GetPicture()
+    {
+        var path = config.ResolvePath("theme-picture");
+        if (!System.IO.File.Exists(path))
+            return NotFound();
+        var head = new byte[16];
+        using (var f = System.IO.File.OpenRead(path))
+            f.ReadExactly(head, 0, Math.Min(16, (int)f.Length));
+        var type = Look.PictureType(head);
+        return type is null ? NotFound() : PhysicalFile(path, type);
+    }
+
     [HttpGet("api/accounts")]
     public async Task<ActionResult<List<UserRow>>> Accounts() =>
         await db.Users.AsNoTracking()
