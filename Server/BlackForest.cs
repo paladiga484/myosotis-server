@@ -118,7 +118,7 @@ public sealed class BlackForest
     // sight until its state lists that word. Open for any account: unlocked, and the rewards are
     // switched on the first time. Every gate sealed: locked, and they're switched off again.
     const string Unlock = "black-forest";
-    static readonly string[] Rewards = ["gebura"];
+    static readonly string[] Rewards = ["kali"];
 
     static bool Holds(JsonArray a, string s) =>
         a.Any(x => x is JsonValue v && v.TryGetValue<string>(out var t) && t == s);
