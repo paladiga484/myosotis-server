@@ -86,5 +86,5 @@ function applyTheme(t){
   document.body.style.backgroundImage = pic ? `url("/tweak/theme/picture?v=${t.picture}")` : "";
 }
 const loadTheme = () => fetch("/tweak/api/theme").then(r => r.ok ? r.json() : null).then(t => t && applyTheme(t)).catch(() => {});
-""";
+""" + "\n";   // a raw string drops its last newline; the page's own script follows on the next line
 }

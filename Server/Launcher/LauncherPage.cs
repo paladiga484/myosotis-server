@@ -349,6 +349,7 @@ $("#quit").onclick = async () => {
 };
 
 loadTheme();
+addEventListener("focus", loadTheme);      // the look may have changed in the mod menu meanwhile
 setMode(mode);
 tick();
 setInterval(tick, 1000);

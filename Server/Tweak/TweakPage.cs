@@ -231,7 +231,7 @@ public static class TweakPage
   <a data-tab="forest" class="forest hide" id="forestlink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 6 4 10v12h4v-6a4 4 0 0 1 8 0v6h4V10c0-4-3-8-8-8zm0 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg><span>The Black Forest</span><em></em></a>
   <a data-tab="look"><span>Appearance</span><em></em></a>
   <a data-tab="seed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>New accounts</span><em></em></a>
-  <div class="foot"><img id="appicon" src="tweak/icon" alt="" width="40" height="40">
+  <div class="foot"><img id="appicon" src="/tweak/icon" alt="" width="40" height="40">
     <div>Mirror<small>Limbus private server</small></div></div>
 </nav>
 
@@ -334,16 +334,16 @@ public static class TweakPage
 
     <section id="tab-forest" class="hide" aria-label="The Black Forest">
       <div id="forestdoor">
-        <button class="door" id="enterforest" title="Enter"><img src="tweak/blackforest/gate" alt="A gate of black trees around a burning eye"></button>
+        <button class="door" id="enterforest" title="Enter"><img src="/tweak/blackforest/gate" alt="A gate of black trees around a burning eye"></button>
         <p class="door-says">Something waits past the trees. Open the gate.</p>
       </div>
-      <div class="within hide" id="forestwithin" style="background-image:url(tweak/blackforest/backdrop)">
+      <div class="within hide" id="forestwithin" style="background-image:url(/tweak/blackforest/backdrop)">
         <h2>The Black Forest</h2>
         <p>Greencliff fell. Kali, the Red Mist, came out of the forest with you: from your next
            launch she fights as Red Eyes &amp; Penitence Ryōshū. Seal the gate and she goes back.</p>
         <button class="btn tonal" id="sealforest">Seal the gate</button>
       </div>
-      <audio id="forestcry" src="tweak/blackforest/cry" preload="none"></audio>
+      <audio id="forestcry" src="/tweak/blackforest/cry" preload="none"></audio>
     </section>
 
     <section id="tab-look" class="hide">
@@ -477,7 +477,8 @@ $("#appicon").addEventListener("error", e => e.target.remove());
 
 /* ── loading ─────────────────────────────────────────────────────────── */
 async function loadAccounts(){
-  const rs = await fetch("tweak/api/accounts").then(r => r.json());
+  const rs = await fetch("/tweak/api/accounts").then(r => r.json()).catch(() => null);
+  if(!rs){ say("The server isn't answering. Start it, then reload this page.", "err"); return; }
   if(!rs.length){ say("No accounts yet. Log into the game once, then reload.", "err"); return; }
   const opts = rs.map(u => `<option value="${u.uid}">uid ${u.uid} (${esc(u.credential)})</option>`).join("");
   $("#acct").innerHTML = opts; $("#copysrc").innerHTML = opts; $("#rsuid").innerHTML = opts;
@@ -485,14 +486,14 @@ async function loadAccounts(){
   uid = rs.some(u => u.uid === remembered) ? remembered : rs[0].uid;
   $("#acct").value = uid;
   showTab(LS.get("tab", "ids"));
-  seed = await fetch("tweak/api/seed").then(r => r.json());
+  seed = await fetch("/tweak/api/seed").then(r => r.json());
   renderSeed();
   await load();
 }
 
 async function load(){
   say("Loading…");
-  const r = await fetch("tweak/api/account/" + uid);
+  const r = await fetch("/tweak/api/account/" + uid);
   if(!r.ok){ say("Could not load that account.", "err"); return; }
   state = await r.json();
   $("#ulvl").value = state.user.level;
@@ -509,7 +510,7 @@ async function load(){
 
 /* ── the Black Forest ────────────────────────────────────────────────── */
 async function forestState(){
-  const f = await fetch(`tweak/api/account/${uid}/blackforest`).then(x => x.json()).catch(() => ({open:false}));
+  const f = await fetch(`/tweak/api/account/${uid}/blackforest`).then(x => x.json()).catch(() => ({open:false}));
   $("#forestlink").classList.toggle("hide", !f.open);
   if(!f.open && LS.get("tab","ids") === "forest") showTab("ids");
   $("#forestdoor").classList.remove("hide");
@@ -522,7 +523,7 @@ $("#enterforest").onclick = () => {
 };
 $("#sealforest").onclick = async () => {
   if(!await ask("Seal the gate?", "The Black Forest closes for this account until Greencliff falls again.", "Seal")) return;
-  const r = await post(`tweak/api/account/${uid}/blackforest/seal`);
+  const r = await post(`/tweak/api/account/${uid}/blackforest/seal`);
   say(r.ok ? "The gate is sealed." : "Could not seal it.", r.ok ? "ok" : "err");
   await forestState(); showTab("ids");
 };
@@ -610,7 +611,7 @@ function irender(){
     <div class="line ${p.num>0?"":"out"}" data-id="${p.id}"><span></span><span class="num">${p.id}</span>
       <span class="title">${p.name ? esc(p.name) : `<s>Item ${p.id}</s>`}</span>
       <span class="set"><input type="number" min="0" max="999999" value="${p.num}" data-f="num"></span>
-    </div>`).join("") : `<p class="empty">No item matches that id.</p>`;
+    </div>`).join("") : `<p class="empty">No item matches that.</p>`;
 }
 function crender(){
   const c = state.collections[curCol]; if(!c) return;
@@ -712,7 +713,7 @@ $("#copybtn").onclick = async () => {
   if(!src || src === uid){ say("Pick a different account to copy from.", "err"); return; }
   if(!await ask("Copy over this account?", `Everything uid ${uid} owns is replaced with a copy of uid ${src}.`, "Copy and overwrite")) return;
   say("Copying…");
-  const r = await post(`tweak/api/account/${uid}/copy-from/${src}`);
+  const r = await post(`/tweak/api/account/${uid}/copy-from/${src}`);
   if(r.ok){ markClean(); await load(); say("Copied from uid " + src + ".", "ok"); }
   else say("Copy failed: HTTP " + r.status, "err");
 };
@@ -721,7 +722,7 @@ $("#resetacct").onclick = async () => {
   const u = +$("#rsuid").value;
   if(!await ask("Reset this account?", `Everything uid ${u} owns is replaced. This can't be undone.`, "Reset", true)) return;
   say("Resetting…");
-  const r = await post(`tweak/api/account/${u}/reset`);
+  const r = await post(`/tweak/api/account/${u}/reset`);
   const j = await r.json().catch(() => ({}));
   say(r.ok ? `Account ${u} reset to ${j.profile}.` : (j.error || "Reset failed."), r.ok ? "ok" : "err");
   if(r.ok && u === uid){ markClean(); await load(); }
@@ -733,10 +734,10 @@ $("#seedsave").onclick = async () => {
     stamina: +$("#susta").value, personalityLevel: +$("#splvl").value,
     personalityUptie: +$("#supt").value, egoUptie: +$("#seupt").value, itemCount: +$("#sitem").value,
     profile: $("#sprofile").value, itemProfile: $("#sitemprofile").value };
-  const r = await post("tweak/api/seed", body);
+  const r = await post("/tweak/api/seed", body);
   const j = await r.json().catch(() => ({}));
   say(r.ok ? (j.saved === false ? "Applied for this session only." : "Defaults saved.") : "Save failed.", r.ok ? "ok" : "err");
-  if(r.ok){ seed = await fetch("tweak/api/seed").then(x => x.json()); renderSeed(); }
+  if(r.ok){ seed = await fetch("/tweak/api/seed").then(x => x.json()); renderSeed(); }
 };
 
 $("#apply").onclick = async () => {
@@ -750,7 +751,7 @@ $("#apply").onclick = async () => {
     items: state.items.map(i => ({id:i.id,num:i.num})),
     collections: cols
   };
-  const r = await post("tweak/api/account/" + uid, body);
+  const r = await post("/tweak/api/account/" + uid, body);
   if(r.ok){ markClean(); await load(); say("Saved. Restart the game or pull to refresh to see it.", "ok"); }
   else say("Save failed: HTTP " + r.status, "err");
 };
@@ -776,23 +777,27 @@ function renderLook(){
   $("#lookpicname").textContent = theme.picture ? "" : "(none chosen yet)";
 }
 async function saveLook(t){
+  clearTimeout(lookTimer);
   applyTheme(t); renderLook();
-  const r = await post("tweak/api/theme", t);
+  const r = await post("/tweak/api/theme", t);
   if(!r.ok) say("Couldn't save the look.", "err");
 }
+/* a colour picker fires on every step of a drag: show each at once, save the last one */
+let lookTimer = 0;
+function saveLookSoon(t){ applyTheme(t); renderLook(); clearTimeout(lookTimer); lookTimer = setTimeout(() => saveLook(t), 300); }
 $$("[name=lookbg]").forEach(r => r.onchange = () => {
   if(r.value === "picture" && !theme.picture){ renderLook(); $("#lookpicrow").classList.remove("hide"); $("#lookfile").click(); return; }
   saveLook({...theme, bg: r.value});
 });
-$("#lookcolour").oninput = e => saveLook({...theme, bg: "colour", colour: e.target.value});
-$("#lookaccent").oninput = e => saveLook({...theme, accent: e.target.value});
+$("#lookcolour").oninput = e => saveLookSoon({...theme, bg: "colour", colour: e.target.value});
+$("#lookaccent").oninput = e => saveLookSoon({...theme, accent: e.target.value});
 $("#looktone").onchange = e => saveLook({...theme, tone: e.target.value});
 $("#lookpick").onclick = () => $("#lookfile").click();
 $("#lookfile").onchange = async e => {
   const f = e.target.files[0]; e.target.value = "";
   if(!f) return;
   if(f.size > 8 << 20){ say("Pictures can be up to 8 MB.", "err"); return; }
-  const r = await fetch("tweak/api/theme/picture", {method:"POST", headers:{"X-Mirror":"1"}, body:f});
+  const r = await fetch("/tweak/api/theme/picture", {method:"POST", headers:{"X-Mirror":"1"}, body:f});
   const j = await r.json().catch(() => ({}));
   if(!r.ok){ say(j.error || "Couldn't use that picture.", "err"); renderLook(); return; }
   applyTheme(j); renderLook(); say("Picture set.", "ok");
