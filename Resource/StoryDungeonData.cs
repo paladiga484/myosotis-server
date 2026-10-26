@@ -88,16 +88,26 @@ public sealed class StoryDungeonData(string staticDataRoot, ILogger<StoryDungeon
 
     public async Task LoadAllAsync()
     {
+        // an entry of a shape we don't expect (a game update) is skipped, never fatal at startup
         var story = new HashSet<int>();
         foreach (var e in await LoadAsync("dungeon"))
-            if (e.TryGetProperty("id", out var id) && e.TryGetProperty("dungeonType", out var t) && t.GetString() == "STORY_DUNGEON")
-                story.Add(id.GetInt32());
+            if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt32(out var i)
+                && e.TryGetProperty("dungeonType", out var t) && t.ValueKind == JsonValueKind.String && t.GetString() == "STORY_DUNGEON")
+                story.Add(i);
         var maps = new Dictionary<int, SdMap>();
         foreach (var e in await LoadAsync("dungeonMap"))
         {
-            var map = e.Deserialize<SdMap>(JsonOptions);
-            if (map is not null && story.Contains(map.id))
-                maps[map.id] = map;
+            if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty("id", out var mid) || mid.ValueKind != JsonValueKind.Number || !mid.TryGetInt32(out var m) || !story.Contains(m))
+                continue;
+            try
+            {
+                if (e.Deserialize<SdMap>(JsonOptions) is { } map)
+                    maps[map.id] = map;
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning("Skipping story dungeon map {Id}: {Error}", m, ex.Message);
+            }
         }
         _maps = maps;
         logger.LogInformation("Story dungeon data: {Count} dungeons ({Ids})", _maps.Count, string.Join(", ", _maps.Keys.Order()));

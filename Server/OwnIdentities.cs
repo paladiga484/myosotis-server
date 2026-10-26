@@ -53,8 +53,9 @@ public static class OwnIdentities
                 return [];
             var out_ = new List<Own>();
             foreach (var e in list.EnumerateArray())
-                if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("id", out var id) && id.TryGetInt32(out var i)
-                    && e.TryGetProperty("base", out var b) && b.TryGetInt32(out var bi))
+                if (e.ValueKind == JsonValueKind.Object
+                    && e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt32(out var i)
+                    && e.TryGetProperty("base", out var b) && b.ValueKind == JsonValueKind.Number && b.TryGetInt32(out var bi))
                     out_.Add(new Own(i, bi, e.TryGetProperty("unlock", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null));
             return out_;
         }
