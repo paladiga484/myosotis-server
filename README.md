@@ -109,9 +109,12 @@ Check a download against the `.sha256` file beside it: `sha256sum -c <file>.sha2
 
 - gacha is kinda broken if the banner doesnt have anything in staticdata
 
-- story dungeon, boss raid and refraction are not supported!! story stages, exp luxcavation and
-  railway play but give no rewards, event rewards grant nothing, and mirror dungeon shops and
-  gift crafting are empty stubs (its gift and exit rewards work)
+- boss raid and refraction are not supported!! story stages, exp luxcavation and railway play
+  but give no rewards, event rewards grant nothing, and mirror dungeon shops and gift crafting
+  are empty stubs (its gift and exit rewards work)
+
+- story dungeons (the canto dungeon maps) are new: the server walks the game's own maps, saves
+  and resumes, but nobody has played one end to end yet, and clearing pays nothing
 
 - etc.
 
