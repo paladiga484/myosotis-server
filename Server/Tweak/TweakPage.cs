@@ -335,7 +335,7 @@ public static class TweakPage
     <section id="tab-forest" class="hide" aria-label="The Black Forest">
       <div id="forestdoor">
         <button class="door" id="enterforest" title="Enter"><img src="tweak/blackforest/gate" alt="A gate of black trees around a burning eye"></button>
-        <p class="door-says">It's the monster! Big terrible monster lives in the dark, black forest!</p>
+        <p class="door-says">Something waits past the trees. Open the gate.</p>
       </div>
       <div class="within hide" id="forestwithin" style="background-image:url(tweak/blackforest/backdrop)">
         <h2>The Black Forest</h2>
