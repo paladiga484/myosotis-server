@@ -24,6 +24,8 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <wchar.h>
+#include <stdio.h>
+#include <string.h>
 
 #define PORT 3000
 static const wchar_t *TITLE = L"Limbus Private Server";
@@ -141,12 +143,13 @@ static int find_edge(wchar_t *out, DWORD cap)
     return 0;
 }
 
-/* ---- the splash: the app's icon, its name and a brass bar, while the server starts ---- */
+/* ---- the splash: icon, name and a thin line while the server starts, in the theme's colours ---- */
 
 static HWND splash;
 static HFONT font_title, font_sub;
 static HICON splash_icon;
 static int splash_tick, dpi = 96;
+static COLORREF col_bg = RGB(0, 0, 0), col_fg = RGB(0xf2, 0xf2, 0xf2), col_accent = RGB(0x7f, 0xa7, 0xd4);
 #define S(x) MulDiv((x), dpi, 96)
 
 static void fill(HDC dc, int l, int t, int r, int b, COLORREF c)
@@ -157,25 +160,68 @@ static void fill(HDC dc, int l, int t, int r, int b, COLORREF c)
     DeleteObject(br);
 }
 
+static COLORREF mix(COLORREF a, COLORREF b, int pct_a)
+{
+    return RGB((GetRValue(a) * pct_a + GetRValue(b) * (100 - pct_a)) / 100,
+               (GetGValue(a) * pct_a + GetGValue(b) * (100 - pct_a)) / 100,
+               (GetBValue(a) * pct_a + GetBValue(b) * (100 - pct_a)) / 100);
+}
+
+/* "#rrggbb" after "key":" in the theme file, or `fallback`. */
+static COLORREF theme_hex(const char *text, const char *key, COLORREF fallback)
+{
+    char pat[32];
+    _snprintf(pat, sizeof pat, "\"%s\":\"#", key);
+    const char *at = strstr(text, pat);
+    unsigned v;
+    if (!at || sscanf(at + strlen(pat), "%6x", &v) != 1)
+        return fallback;
+    return RGB((v >> 16) & 255, (v >> 8) & 255, v & 255);
+}
+
+/* The mod menu's Appearance setting (server\theme.json): background and accent. Black if unset. */
+static void splash_theme(void)
+{
+    wchar_t path[MAX_PATH];
+    if (_snwprintf(path, MAX_PATH, L"%lsserver\\theme.json", here) < 0)
+        return;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    char text[1024];
+    DWORD n = 0;
+    ReadFile(f, text, sizeof text - 1, &n, NULL);
+    CloseHandle(f);
+    text[n] = 0;
+    if (strstr(text, "\"bg\":\"white\"") || (strstr(text, "\"bg\":\"picture\"") && strstr(text, "\"tone\":\"light\"")))
+        col_bg = RGB(255, 255, 255);
+    else if (strstr(text, "\"bg\":\"colour\""))
+        col_bg = theme_hex(text, "colour", col_bg);
+    int light = GetRValue(col_bg) * 299 + GetGValue(col_bg) * 587 + GetBValue(col_bg) * 114 > 150000;
+    col_fg = light ? RGB(0x11, 0x11, 0x11) : RGB(0xf2, 0xf2, 0xf2);
+    col_accent = theme_hex(text, "accent", col_accent);
+}
+
 static void splash_draw(HDC dc, RECT rc)
 {
-    fill(dc, 0, 0, rc.right, rc.bottom, RGB(0x4b, 0x43, 0x37));                       /* outline */
-    fill(dc, 1, 1, rc.right - 1, rc.bottom - 1, RGB(0x15, 0x12, 0x0e));               /* umber */
+    fill(dc, 0, 0, rc.right, rc.bottom, mix(col_fg, col_bg, 18));                    /* hairline */
+    fill(dc, 1, 1, rc.right - 1, rc.bottom - 1, col_bg);
     if (splash_icon)
-        DrawIconEx(dc, S(30), S(36), splash_icon, S(64), S(64), 0, NULL, DI_NORMAL);
+        DrawIconEx(dc, S(24), S(28), splash_icon, S(32), S(32), 0, NULL, DI_NORMAL);
     SetBkMode(dc, TRANSPARENT);
     SelectObject(dc, font_title);
-    SetTextColor(dc, RGB(0xed, 0xe3, 0xd1));
-    TextOutW(dc, S(114), S(44), TITLE, (int)wcslen(TITLE));
+    SetTextColor(dc, col_fg);
+    TextOutW(dc, S(70), S(26), TITLE, (int)wcslen(TITLE));
     SelectObject(dc, font_sub);
-    SetTextColor(dc, RGB(0xcb, 0xbf, 0xac));
-    TextOutW(dc, S(114), S(74), L"Starting the server...", 22);
-    int l = S(30), r = rc.right - S(30), t = rc.bottom - S(38), b = t + S(3);
-    fill(dc, l, t, r, b, RGB(0x36, 0x30, 0x28));                                      /* track */
-    int seg = (r - l) / 3, pos = (splash_tick * S(5)) % (r - l + seg) - seg;
+    SetTextColor(dc, mix(col_fg, col_bg, 60));
+    TextOutW(dc, S(70), S(48), L"Starting the server", 19);
+    /* a thin line along the bottom, a short stretch of accent moving slowly along it */
+    int l = 1, r = rc.right - 1, t = rc.bottom - S(3), b = rc.bottom - 1;
+    fill(dc, l, t, r, b, mix(col_fg, col_bg, 10));
+    int seg = (r - l) / 4, pos = (splash_tick * S(2)) % (r - l + seg) - seg;
     int bl = l + pos < l ? l : l + pos, br = l + pos + seg > r ? r : l + pos + seg;
     if (br > bl)
-        fill(dc, bl, t, br, b, RGB(0xe8, 0xbf, 0x6a));                                /* brass */
+        fill(dc, bl, t, br, b, col_accent);
 }
 
 static LRESULT CALLBACK splash_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
@@ -225,17 +271,18 @@ static void splash_open(HINSTANCE inst)
     wc.lpszClassName = L"LimbusPrivateServerSplash";
     if (!RegisterClassW(&wc))
         return;
-    int w = S(440), h = S(170);
+    splash_theme();
+    int w = S(380), h = S(92);
     splash = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, TITLE, WS_POPUP,
                              (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2,
                              w, h, NULL, NULL, inst, NULL);
     if (!splash)
         return;                                /* no display to show it on: carry on without */
-    font_title = CreateFontW(-S(21), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+    font_title = CreateFontW(-S(15), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                              CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    font_sub = CreateFontW(-S(15), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+    font_sub = CreateFontW(-S(13), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-    splash_icon = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, S(64), S(64), LR_DEFAULTCOLOR);
+    splash_icon = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, S(32), S(32), LR_DEFAULTCOLOR);
     ShowWindow(splash, SW_SHOWNORMAL);
     UpdateWindow(splash);
     SetForegroundWindow(splash);
