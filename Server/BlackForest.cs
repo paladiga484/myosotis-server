@@ -59,6 +59,15 @@ public sealed class BlackForest
             _lastLocalBattler = uid;
     }
 
+    /// <summary>A fight ended: a fall after this (or in a fight that never went through
+    /// EnterStageBattle, like Mirror Dungeon) must not be credited to it.</summary>
+    public void EndBattle(long uid)
+    {
+        lock (Gate)
+            if (_lastLocalBattler == uid)
+                _lastLocalBattler = 0;
+    }
+
     /// <summary>Greencliff fell. Returns the account it happened to, or 0 if no local fight is known.</summary>
     public long Fell()
     {
@@ -103,21 +112,22 @@ public sealed class BlackForest
 
     void Save()
     {
-        var tmp = _path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(new Saved([.. _open.Order()], [.. _pendingWin.Order()])));
-        File.Move(tmp, _path, overwrite: true);
+        // a failed write keeps the state in memory: it must never fail the battle request it rides on
+        try
+        {
+            var tmp = _path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(new Saved([.. _open.Order()], [.. _pendingWin.Order()])));
+            File.Move(tmp, _path, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     sealed record Saved(List<long>? Open, List<long>? PendingWin);
 
     /// <summary>Whether a request came from this machine (the same test the mod menu uses).</summary>
-    public static bool IsLocal(HttpContext context)
-    {
-        var remote = context.Connection.RemoteIpAddress;
-        if (remote is { IsIPv4MappedToIPv6: true })
-            remote = remote.MapToIPv4();
-        return remote is not null && System.Net.IPAddress.IsLoopback(remote);
-    }
+    public static bool IsLocal(HttpContext context) => Tweak.LocalOnlyAttribute.IsLoopback(context);
 }
 
 /// <summary>

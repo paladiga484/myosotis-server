@@ -520,12 +520,18 @@ public sealed class TweakController(
 /// </summary>
 public sealed class LocalOnlyAttribute : Microsoft.AspNetCore.Mvc.Filters.ActionFilterAttribute
 {
-    public override void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+    /// <summary>Whether the request's peer is this machine.</summary>
+    public static bool IsLoopback(HttpContext context)
     {
-        var remote = context.HttpContext.Connection.RemoteIpAddress;
+        var remote = context.Connection.RemoteIpAddress;
         if (remote is { IsIPv4MappedToIPv6: true })
             remote = remote.MapToIPv4();
-        if (remote is null || !System.Net.IPAddress.IsLoopback(remote))
+        return remote is not null && System.Net.IPAddress.IsLoopback(remote);
+    }
+
+    public override void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+    {
+        if (!IsLoopback(context.HttpContext))
         {
             context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return;

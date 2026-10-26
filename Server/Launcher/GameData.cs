@@ -26,6 +26,10 @@ public static partial class GameData
         var root = Path.GetDirectoryName(target)!;                         // .../game-data
         var have = Directory.Exists(Path.Combine(target, "personality"));
         var stampPath = Path.Combine(root, "SOURCE");
+        // root is replaced wholesale below: never let that be the server's own folder
+        var dbDir = Path.GetDirectoryName(Path.GetFullPath(config.ResolvePath(config.Database.Path)));
+        if (File.Exists(Path.Combine(root, "Config.json")) || string.Equals(dbDir, Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase))
+            return $"staticData.path must sit in a folder of its own (game-data/static-data), not {config.StaticData.Path}";
         try
         {
             var cache = CacheDir();
@@ -75,9 +79,29 @@ public static partial class GameData
                     }
             }
             File.WriteAllText(Path.Combine(tmp, "SOURCE"), stamp + "\n");
+            // swap, never delete first: a failed move must leave the old data where it was
+            var old = root + ".old";
+            if (Directory.Exists(old))
+                Directory.Delete(old, true);
             if (Directory.Exists(root))
-                Directory.Delete(root, true);
-            Directory.Move(tmp, root);
+                Directory.Move(root, old);
+            try
+            {
+                Directory.Move(tmp, root);
+            }
+            catch (IOException) when (Directory.Exists(old) && !Directory.Exists(root))
+            {
+                Directory.Move(old, root);
+                throw;
+            }
+            try
+            {
+                if (Directory.Exists(old))
+                    Directory.Delete(old, true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
             note = $"Game data read from this PC's Limbus: {n} tables, {names} name files ({bundle})";
             if (names == 0)
                 note += " - Limbus's folder wasn't found, so the mod menu shows ids instead of names";

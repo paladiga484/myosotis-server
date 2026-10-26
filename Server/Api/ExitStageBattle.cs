@@ -11,7 +11,9 @@ public partial class ApiController
     {
         var uid = HttpContext.GetUid();
         // Greencliff took everyone with him: the fight counts as won
-        var iswin = BlackForest.For(_config).TakeWin(uid) || req.parameters.iswin;
+        var forest = BlackForest.For(_config);
+        var iswin = forest.TakeWin(uid) || req.parameters.iswin;
+        forest.EndBattle(uid);
         var formation = await _formations.GetAsync(uid, req.parameters.formationid);
         var levels = await _personalities.GetLevelsAsync(
             uid, formation?.formationDetails.Select(d => d.personalityId).ToList() ?? []);
