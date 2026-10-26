@@ -55,6 +55,9 @@ builder.Services.AddSingleton(sp => new StaticDataService(
 builder.Services.AddSingleton(sp => new MirrorDungeonData(
     config.StaticDataRoot(),
     sp.GetRequiredService<ILogger<MirrorDungeonData>>()));
+builder.Services.AddSingleton(sp => new StoryDungeonData(
+    config.StaticDataRoot(),
+    sp.GetRequiredService<ILogger<StoryDungeonData>>()));
 builder.Services.AddSingleton<Server.MirrorDungeon.MapGenerator>();
 builder.Services.AddSingleton<Server.MirrorDungeon.ThemeFloorPicker>();
 
@@ -75,6 +78,7 @@ builder.Services.AddScoped<TicketRepository>();
 builder.Services.AddScoped<ProfileRepository>();
 builder.Services.AddScoped<RailwayRepository>();
 builder.Services.AddScoped<MirrorDungeonRepository>();
+builder.Services.AddScoped<StoryDungeonRepository>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddSingleton<Server.Launcher.LauncherService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<Server.Launcher.LauncherService>());
@@ -124,6 +128,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 
     var mirrorData = scope.ServiceProvider.GetRequiredService<MirrorDungeonData>();
     await mirrorData.LoadAllAsync();
+    await scope.ServiceProvider.GetRequiredService<StoryDungeonData>().LoadAllAsync();
 }
 
 if (config.Logging.LogBodies)

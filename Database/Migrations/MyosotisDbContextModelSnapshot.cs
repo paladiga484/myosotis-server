@@ -453,6 +453,36 @@ namespace Database.Migrations
                     b.ToTable("railway_save_unit_egos", (string)null);
                 });
 
+            modelBuilder.Entity("Database.Entities.StoryDungeonSave", b =>
+                {
+                    b.Property<long>("Uid")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("uid");
+
+                    b.Property<int>("DungeonId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("dungeon_id");
+
+                    b.Property<string>("RecordsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("records_json");
+
+                    b.Property<string>("SaveJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("save_json");
+
+                    b.Property<long>("UpdatedAt")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Uid")
+                        .HasName("pk_story_dungeon_saves");
+
+                    b.ToTable("story_dungeon_saves", (string)null);
+                });
+
             modelBuilder.Entity("Database.Entities.User", b =>
                 {
                     b.Property<long>("Uid")
@@ -850,6 +880,16 @@ namespace Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_railway_save_unit_egos_railway_save_units_uid_dungeon_id_pord");
+                });
+
+            modelBuilder.Entity("Database.Entities.StoryDungeonSave", b =>
+                {
+                    b.HasOne("Database.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("Uid")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_story_dungeon_saves_users_uid");
                 });
 
             modelBuilder.Entity("Database.Entities.UserAnnouncer", b =>
