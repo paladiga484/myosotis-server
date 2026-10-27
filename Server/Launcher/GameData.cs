@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Common;
 
@@ -36,12 +38,10 @@ public static partial class GameData
             if (cache is null || !Directory.Exists(cache))
                 return have ? null : "Limbus hasn't been started on this PC yet.\n\nStart it once through Steam, "
                     + "wait for the title screen, close it, then open this app again.";
-            var (bundle, tables) = FindBundle(cache);
+            var (bundle, stamp, tables) = FindBundle(cache);
             if (bundle is null)
                 return have ? null : "Limbus hasn't downloaded its game data yet.\n\nStart it once through Steam, "
                     + "wait for the title screen, close it, then open this app again.";
-            var info = new FileInfo(bundle);
-            var stamp = $"{bundle}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
             if (have && File.Exists(stampPath) && File.ReadAllText(stampPath).Trim() == stamp)
                 return null;
 
@@ -165,31 +165,68 @@ public static partial class GameData
     [GeneratedRegex("\"path\"\\s+\"([^\"]+)\"")]
     private static partial Regex LibraryPath();
 
-    /// <summary>The newest cached bundle holding the static tables, and its TextAssets.</summary>
-    static (string? Path, List<(string Path, byte[] Bytes)>? Tables) FindBundle(string cache)
+    /// <summary>
+    /// The newest cached bundle holding the static tables, a stamp of its contents and its
+    /// TextAssets. A file a limbus-skins session swapped out is read from the stock copy it set
+    /// aside: a session's rewritten tables never become the server's, and the stock file is the
+    /// small one (the rewritten bundle is uncompressed, past the size limit below).
+    /// </summary>
+    static (string? Path, string? Stamp, List<(string Path, byte[] Bytes)>? Tables) FindBundle(string cache)
     {
         var marker = Encoding.ASCII.GetBytes(Marker);
+        var stock = SkinStock(cache);
         var candidates = Directory.EnumerateDirectories(cache)
             .SelectMany(d => Directory.EnumerateDirectories(d))
-            .Select(d => new FileInfo(Path.Combine(d, "__data")))
-            .Where(f => f.Exists && f.Length < 16 << 20)
-            .OrderByDescending(f => f.LastWriteTimeUtc);
-        foreach (var f in candidates)
+            .Select(d => Path.GetFullPath(Path.Combine(d, "__data")))
+            .Select(p => (Cached: p, Read: new FileInfo(stock.GetValueOrDefault(p, p))))
+            .Where(c => c.Read.Exists && c.Read.Length < 16 << 20)
+            .OrderByDescending(c => c.Read.LastWriteTimeUtc);
+        foreach (var (cached, f) in candidates)
         {
             try
             {
-                var data = Unpack(File.ReadAllBytes(f.FullName));
+                var raw = File.ReadAllBytes(f.FullName);
+                var data = Unpack(raw);
                 if (data.AsSpan().IndexOf(marker) < 0)
                     continue;
                 var tables = TextAssets(data).ToList();
                 if (tables.Count(t => t.Path.Contains(Marker, StringComparison.Ordinal)) > 0)
-                    return (f.FullName, tables);
+                    // by contents, not path or time: a session's swap and restore don't re-import
+                    return (cached, $"{raw.Length}|{Convert.ToHexStringLower(SHA256.HashData(raw))}", tables);
             }
             catch (Exception e) when (e is InvalidDataException or IndexOutOfRangeException or ArgumentException)
             {
             }
         }
-        return (null, null);
+        return (null, null, null);
+    }
+
+    /// <summary>Cached file -> the stock copy limbus-skins set aside, while a session is applied.</summary>
+    static Dictionary<string, string> SkinStock(string cache)
+    {
+        var map = new Dictionary<string, string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var dir = OwnIdentities.DataDir();
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "active.json")));
+            if (!doc.RootElement.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
+                return map;
+            foreach (var e in files.EnumerateArray())
+            {
+                if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty("rel", out var r) || r.ValueKind != JsonValueKind.String)
+                    continue;
+                var parts = r.GetString()!.Split('/', '\\');
+                if (parts.Any(p => p is "" or "." or ".."))
+                    continue;
+                var keep = Path.Combine([dir, "stock", .. parts]);
+                if (File.Exists(keep))
+                    map[Path.GetFullPath(Path.Combine([cache, .. parts]))] = keep;
+            }
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+        }
+        return map;
     }
 
     // ---------------------------------------------------------------- UnityFS bundle

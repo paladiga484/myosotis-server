@@ -21,7 +21,8 @@ public static class OwnIdentities
 {
     public sealed record Own(int Id, int Base, string? Unlock);
 
-    static string DataDir()
+    /// <summary>limbus-skins' data folder (active.json, stock/, built/).</summary>
+    internal static string DataDir()
     {
         var data = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_DATA");
         return string.IsNullOrEmpty(data)
