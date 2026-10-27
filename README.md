@@ -15,6 +15,9 @@ server reads the game's data from your own Limbus install, and your Steam copy i
 
 Before either: install Limbus through Steam and start it once, up to the title screen.
 
+**In a hurry? [INSTALL.md](INSTALL.md)** has copy-paste one-liners for Linux (Mint, Ubuntu,
+Debian, Fedora, Arch) and Windows (PowerShell): install, play with skins, and an alias.
+
 **Windows**
 
 1. Unzip `LimbusPrivateServer-Windows-<version>.zip` somewhere normal (Desktop, Documents).
