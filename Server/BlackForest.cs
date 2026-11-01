@@ -120,13 +120,16 @@ public sealed class BlackForest
     const string Unlock = "black-forest";
     static readonly string[] Rewards = ["kali"];
 
-    /// <summary>What comes out of the forest, as the mod menu names it: Kali, and every mod of this
-    /// machine's own mods folder (mods.sh, beside the server's) marked as a reward - its
-    /// mods/&lt;name&gt;/unlock holds "black-forest", and its second line the name to show (else the
-    /// folder's). MYOSOTIS_MODS_DIR overrides the folder. Packages have none: just Kali.</summary>
+    const string Kali = "Kali, the Red Mist - as Red Eyes & Penitence Ryōshū";
+
+    /// <summary>What comes out of the forest, as the mod menu names it: the limbus-skins skins that
+    /// wait for it (its locks.json, written whenever limbus-skins runs; Kali alone without one), and
+    /// every mod of this machine's own mods folder (mods.sh, beside the server's) marked as a
+    /// reward - its mods/&lt;name&gt;/unlock holds "black-forest", and its second line the name to
+    /// show (else the folder's). MYOSOTIS_MODS_DIR overrides the folder.</summary>
     public static List<string> Gifts(Config config)
     {
-        var gifts = new List<string> { "Kali, the Red Mist - as Red Eyes & Penitence Ryōshū" };
+        var gifts = SkinGifts();
         var env = Environment.GetEnvironmentVariable("MYOSOTIS_MODS_DIR");
         var dir = string.IsNullOrEmpty(env) ? config.ResolvePath("../mods") : env;
         try
@@ -146,9 +149,27 @@ public sealed class BlackForest
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            // a mods folder that can't be read gives nothing more than Kali
+            // a mods folder that can't be read gives no mods
         }
         return gifts;
+    }
+
+    /// <summary>limbus-skins' locks.json: {"black-forest": [title...]}. Kali alone when there is none
+    /// or it can't be read (a limbus-skins older than the file).</summary>
+    static List<string> SkinGifts()
+    {
+        try
+        {
+            var doc = JsonNode.Parse(File.ReadAllText(Path.Combine(OwnIdentities.DataDir(), "locks.json")));
+            if (doc?[Unlock] is JsonArray list)
+                return list.Select(x => x is JsonValue v && v.TryGetValue<string>(out var t) ? t.Trim() : "")
+                           .Where(t => t.Length is > 0 and <= 200).Distinct().ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // no file (limbus-skins hasn't run, or predates it), or a damaged one
+        }
+        return [Kali];
     }
 
     static bool Holds(JsonArray a, string s) =>
