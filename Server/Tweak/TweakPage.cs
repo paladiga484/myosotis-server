@@ -197,7 +197,13 @@ public static class TweakPage
   #tab-forest .within h2{font:600 20px/28px var(--font)}
   #tab-forest .within p{color:#cdbfa6;max-width:60ch}
   #tab-forest .within .btn{margin-top:12px;color:#e8e2d6;border-color:#555;background:#111}
+  #tab-forest .shut{max-height:58vh;max-width:100%;display:block;margin:0 auto;filter:grayscale(1) brightness(.3)}
+  #tab-forest .shutlock{width:56px;height:56px;fill:#8a7f6c;display:block;margin:14px auto 0}
+  #tab-forest .within ul{list-style:none;color:#e8e2d6}
   .drawer a.forest{color:#e5484d}
+  .drawer a.forest .lock{display:none;width:14px;height:14px;fill:currentColor;vertical-align:-2px}
+  .drawer a.forest.locked{color:var(--muted)}
+  .drawer a.forest.locked .lock{display:inline}
 
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:var(--line);border:2px solid var(--bg);border-radius:5px}
@@ -228,7 +234,7 @@ public static class TweakPage
   <hr>
   <p class="dhead">Accounts</p>
   <a data-tab="acct"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>This account</span><em></em></a>
-  <a data-tab="forest" class="forest hide" id="forestlink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 6 4 10v12h4v-6a4 4 0 0 1 8 0v6h4V10c0-4-3-8-8-8zm0 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg><span>The Black Forest</span><em></em></a>
+  <a data-tab="forest" class="forest locked" id="forestlink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 6 4 10v12h4v-6a4 4 0 0 1 8 0v6h4V10c0-4-3-8-8-8zm0 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/></svg><span>The Black Forest</span><em><svg class="lock" viewBox="0 0 24 24" aria-label="locked"><path d="M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2z"/></svg></em></a>
   <a data-tab="look"><span>Appearance</span><em></em></a>
   <a data-tab="seed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>New accounts</span><em></em></a>
   <div class="foot"><img id="appicon" src="/tweak/icon" alt="" width="40" height="40">
@@ -333,14 +339,20 @@ public static class TweakPage
     </section>
 
     <section id="tab-forest" class="hide" aria-label="The Black Forest">
-      <div id="forestdoor">
+      <div id="forestshut">
+        <img class="shut" src="/tweak/blackforest/gate" alt="" onerror="this.remove()">
+        <svg class="shutlock" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2z"/></svg>
+        <p class="door-says">The gate is shut. It opens the day Greencliff falls in a fight.</p>
+      </div>
+      <div id="forestdoor" class="hide">
         <button class="door" id="enterforest" title="Enter"><img src="/tweak/blackforest/gate" alt="A gate of black trees around a burning eye"></button>
         <p class="door-says">Something waits past the trees. Open the gate.</p>
       </div>
       <div class="within hide" id="forestwithin" style="background-image:url(/tweak/blackforest/backdrop)">
         <h2>The Black Forest</h2>
-        <p>Greencliff fell. Kali, the Red Mist, came out of the forest with you: from your next
-           launch she fights as Red Eyes &amp; Penitence Ryōshū. Seal the gate and she goes back.</p>
+        <p>Greencliff fell, and these came out of the forest with you. From your next launch they
+           are yours; seal the gate and they go back.</p>
+        <ul id="forestgifts"></ul>
         <button class="btn tonal" id="sealforest">Seal the gate</button>
       </div>
       <audio id="forestcry" src="/tweak/blackforest/cry" preload="none"></audio>
@@ -511,10 +523,14 @@ async function load(){
 /* ── the Black Forest ────────────────────────────────────────────────── */
 async function forestState(){
   const f = await fetch(`/tweak/api/account/${uid}/blackforest`).then(x => x.json()).catch(() => ({open:false}));
-  $("#forestlink").classList.toggle("hide", !f.open);
-  if(!f.open && LS.get("tab","ids") === "forest") showTab("ids");
-  $("#forestdoor").classList.remove("hide");
+  $("#forestlink").classList.toggle("locked", !f.open);   // always there; locked until Greencliff falls
+  $("#forestlink").title = f.open ? "" : "Locked";
+  $("#forestshut").classList.toggle("hide", f.open);
+  $("#forestdoor").classList.toggle("hide", !f.open);
   $("#forestwithin").classList.add("hide");
+  if(!f.open) return;
+  const g = await fetch("/tweak/api/blackforest/gifts").then(x => x.json()).catch(() => ({gifts:[]}));
+  $("#forestgifts").innerHTML = (g.gifts || []).map(n => `<li>${esc(n)}</li>`).join("");
 }
 $("#enterforest").onclick = () => {
   $("#forestdoor").classList.add("hide");
@@ -525,7 +541,7 @@ $("#sealforest").onclick = async () => {
   if(!await ask("Seal the gate?", "The Black Forest closes for this account until Greencliff falls again.", "Seal")) return;
   const r = await post(`/tweak/api/account/${uid}/blackforest/seal`);
   say(r.ok ? "The gate is sealed." : "Could not seal it.", r.ok ? "ok" : "err");
-  await forestState(); showTab("ids");
+  await forestState();                                    // the tab stays, shut again
 };
 
 function renderSeed(){

@@ -120,6 +120,37 @@ public sealed class BlackForest
     const string Unlock = "black-forest";
     static readonly string[] Rewards = ["kali"];
 
+    /// <summary>What comes out of the forest, as the mod menu names it: Kali, and every mod of this
+    /// machine's own mods folder (mods.sh, beside the server's) marked as a reward - its
+    /// mods/&lt;name&gt;/unlock holds "black-forest", and its second line the name to show (else the
+    /// folder's). MYOSOTIS_MODS_DIR overrides the folder. Packages have none: just Kali.</summary>
+    public static List<string> Gifts(Config config)
+    {
+        var gifts = new List<string> { "Kali, the Red Mist - as Red Eyes & Penitence Ryōshū" };
+        var env = Environment.GetEnvironmentVariable("MYOSOTIS_MODS_DIR");
+        var dir = string.IsNullOrEmpty(env) ? config.ResolvePath("../mods") : env;
+        try
+        {
+            IEnumerable<string> mods = Directory.Exists(dir) ? Directory.GetDirectories(dir).Order() : [];
+            foreach (var mod in mods)
+            {
+                var file = Path.Combine(mod, "unlock");
+                if (Path.GetFileName(mod).StartsWith('.') || !File.Exists(file))
+                    continue;
+                var lines = File.ReadAllLines(file);
+                if (lines.Length == 0 || lines[0].Trim() != Unlock)
+                    continue;
+                var title = lines.Length > 1 ? lines[1].Trim() : "";
+                gifts.Add(title.Length > 0 ? title : Path.GetFileName(mod));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // a mods folder that can't be read gives nothing more than Kali
+        }
+        return gifts;
+    }
+
     static bool Holds(JsonArray a, string s) =>
         a.Any(x => x is JsonValue v && v.TryGetValue<string>(out var t) && t == s);
 

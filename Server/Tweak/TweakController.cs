@@ -124,6 +124,10 @@ public sealed class TweakController(
     [HttpGet("api/account/{uid:long}/blackforest")]
     public IActionResult ForestState(long uid) => Ok(new { open = BlackForest.For(config).IsOpen(uid) });
 
+    /// <summary>What the forest gives on this machine, named inside the gate.</summary>
+    [HttpGet("api/blackforest/gifts")]
+    public IActionResult ForestGifts() => Ok(new { gifts = BlackForest.Gifts(config) });
+
     /// <summary>The client patch saw Greencliff die: while he is on in limbus-skins, the
     /// jumpscare plays, and the account in this machine's current fight wins it and finds the
     /// gate open.</summary>
