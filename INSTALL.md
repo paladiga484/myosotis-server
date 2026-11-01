@@ -1,8 +1,8 @@
 # Install in one-liners
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
-to install, one to play. Made for **Limbus 1.117.1**: server build 5 (`app-1.117.1-5`) and
-limbus-skins 1.3.2. Your Steam copy of Limbus is never modified.
+to install, one to play. Made for **Limbus 1.118.0**: the server package `app-1.118.0` and
+limbus-skins 1.4.0. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
 then close it.
@@ -25,7 +25,7 @@ sudo pacman -S --needed curl python-pipx         # Arch, EndeavourOS, CachyOS, M
 ### 2. Install: the server package, checked against its checksum, and the skins
 
 ```sh
-mkdir -p ~/Games && cd ~/Games && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.117.1-5/LimbusPrivateServer-Linux-1.117.1.tar.gz && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.117.1-5/LimbusPrivateServer-Linux-1.117.1.tar.gz.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.117.1.tar.gz.sha256 && tar xzf LimbusPrivateServer-Linux-1.117.1.tar.gz && curl -fLO https://github.com/paladiga484/limbus-skins/releases/download/v1.3.2/limbus_skins-1.3.2-py3-none-any.whl && pipx install ./limbus_skins-1.3.2-py3-none-any.whl && ~/.local/bin/limbus-skins on all
+mkdir -p ~/Games && cd ~/Games && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && tar xzf LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/limbus-skins/releases/download/v1.4.0/limbus_skins-1.4.0-py3-none-any.whl && pipx install ./limbus_skins-1.4.0-py3-none-any.whl && ~/.local/bin/limbus-skins on all
 ```
 
 ### 3. Check it finds Steam, Limbus and Proton (changes nothing)
@@ -71,7 +71,7 @@ Open **PowerShell** (Start menu, type "PowerShell").
 ### 1. Install the server package, checked against its checksum
 
 ```powershell
-$d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.117.1-5"; $f="LimbusPrivateServer-Windows-1.117.1.zip"; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; Expand-Archive $f -DestinationPath . -Force; "ok: $d\LimbusPrivateServer"
+$d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0"; $f="LimbusPrivateServer-Windows-1.118.0.zip"; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; Expand-Archive $f -DestinationPath . -Force; "ok: $d\LimbusPrivateServer"
 ```
 
 ### 2. Play without skins
@@ -86,7 +86,7 @@ Press **Play** in the window. If Windows says "Windows protected your PC": More 
 ### 3. Skins (optional): Python, then limbus-skins
 
 ```powershell
-winget install -e --id Python.Python.3.12; cd "$HOME\Games"; iwr https://github.com/paladiga484/limbus-skins/releases/download/v1.3.2/limbus_skins-1.3.2-py3-none-any.whl -OutFile limbus_skins-1.3.2-py3-none-any.whl; py -m pip install --user .\limbus_skins-1.3.2-py3-none-any.whl; py -m limbus_skins on all
+winget install -e --id Python.Python.3.12; cd "$HOME\Games"; iwr https://github.com/paladiga484/limbus-skins/releases/download/v1.4.0/limbus_skins-1.4.0-py3-none-any.whl -OutFile limbus_skins-1.4.0-py3-none-any.whl; py -m pip install --user .\limbus_skins-1.4.0-py3-none-any.whl; py -m limbus_skins on all
 ```
 
 (Close and reopen PowerShell after installing Python if `py` isn't found.)
