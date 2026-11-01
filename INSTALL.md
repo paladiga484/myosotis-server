@@ -14,53 +14,38 @@ details, and `check` (below) says what it can't find.
 
 ## Linux (Steam with Proton, native or Flatpak)
 
-### 1. Tools - pick your distro
+### 1. Download, check and unpack
 
 ```sh
-sudo apt install -y curl pipx                    # Linux Mint, Ubuntu, Debian, Pop!_OS
-sudo dnf install -y curl pipx                    # Fedora
-sudo pacman -S --needed curl python-pipx         # Arch, EndeavourOS, CachyOS, Manjaro
+mkdir -p ~/Games && cd ~/Games && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && tar xzf LimbusPrivateServer-Linux-1.118.0.tar.gz
 ```
 
-### 2. Install: the server package, checked against its checksum, and the skins
+(`curl` is missing? `sudo apt install curl` on Mint, Ubuntu, Debian, Pop!_OS; `sudo dnf install curl`
+on Fedora; `sudo pacman -S curl` on Arch, EndeavourOS, CachyOS, Manjaro.)
+
+### 2. Install
 
 ```sh
-mkdir -p ~/Games && cd ~/Games && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && tar xzf LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/limbus-skins/releases/download/v1.4.0/limbus_skins-1.4.0-py3-none-any.whl && pipx install ./limbus_skins-1.4.0-py3-none-any.whl && ~/.local/bin/limbus-skins on all
+~/Games/LimbusPrivateServer/install.sh
 ```
 
-### 3. Check it finds Steam, Limbus and Proton (changes nothing)
+It asks in windows on a desktop (zenity or kdialog), else in the terminal, and puts everything in
+your home folder: the server in `~/.local/share/LimbusPrivateServer`, the command `limbus`, two
+entries in your app menu - **Limbus Private Server** and **Limbus Mod Manager** - and the skins
+(limbus-skins, in a Python folder of its own; if Python is missing it offers your distribution's
+package). It checks for Steam, Limbus and Proton first. After that, the unpacked folder can go.
 
-```sh
-cd ~/Games/LimbusPrivateServer && ./play.sh check
-```
+### 3. Play (every time)
 
-### 4. Play (every time)
+Open **Limbus Private Server** from your app menu, or type `limbus` in a terminal. It swaps the
+skins in (slow only the first time), starts the server and Limbus, attaches the patch, and puts
+the game's own files back when Limbus closes.
 
-```sh
-cd ~/Games/LimbusPrivateServer && ~/.local/bin/limbus-skins run --yes -- ./play.sh
-```
+`limbus help` lists the rest: `limbus menu` (the mod menu, while it runs), `limbus check`,
+`limbus plain` (no skins), `limbus skins list`, `limbus uninstall` (keeps your save unless you
+say otherwise).
 
-That builds the skins (slow only the first time), swaps them in, starts the server and Limbus,
-attaches the patch, and puts the game's own files back when Limbus closes. Leave the terminal
-open while you play.
-
-### 5. Aliases (optional)
-
-bash (the default on Mint, Ubuntu, Debian, Fedora):
-
-```sh
-printf '%s\n' "alias limbus='cd ~/Games/LimbusPrivateServer && ~/.local/bin/limbus-skins run --yes -- ./play.sh'" "alias limbus-menu='cd ~/Games/LimbusPrivateServer && ./play.sh menu'" "alias limbus-check='cd ~/Games/LimbusPrivateServer && ./play.sh check'" "alias limbus-skins='~/.local/bin/limbus-skins'" >> ~/.bashrc && source ~/.bashrc
-```
-
-zsh: the same line with `~/.zshrc`. fish:
-
-```fish
-alias --save limbus 'cd ~/Games/LimbusPrivateServer && ~/.local/bin/limbus-skins run --yes -- ./play.sh'; alias --save limbus-menu 'cd ~/Games/LimbusPrivateServer && ./play.sh menu'; alias --save limbus-check 'cd ~/Games/LimbusPrivateServer && ./play.sh check'
-```
-
-Then: `limbus` plays, `limbus-menu` opens the mod menu while it runs, `limbus-check` checks.
-
-Without skins, play with `cd ~/Games/LimbusPrivateServer && ./play.sh` instead.
+Without installing, everything also runs from the unpacked folder: `./play.sh check`, `./play.sh`.
 
 ---
 
