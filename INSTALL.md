@@ -2,7 +2,7 @@
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
 to install, one to play. Made for **Limbus 1.118.0**: the server package `app-1.118.0` and
-limbus-skins 1.4.0. Your Steam copy of Limbus is never modified.
+limbus-skins 1.5.0. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
 then close it.
@@ -14,30 +14,32 @@ details, and `check` (below) says what it can't find.
 
 ## Linux (Steam with Proton, native or Flatpak)
 
-### 1. Download, check and unpack
+### 1. Download and install - one file
 
 ```sh
-mkdir -p ~/Games && cd ~/Games && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.tar.gz.sha256 && tar xzf LimbusPrivateServer-Linux-1.118.0.tar.gz
+cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.run.sha256 && bash LimbusPrivateServer-Linux-1.118.0.run
 ```
 
-(`curl` is missing? `sudo apt install curl` on Mint, Ubuntu, Debian, Pop!_OS; `sudo dnf install curl`
-on Fedora; `sudo pacman -S curl` on Arch, EndeavourOS, CachyOS, Manjaro.)
+(Or download the `.run` from the release page and double-click it - choose Run if asked. `curl` is
+missing? `sudo apt install curl` on Mint, Ubuntu, Debian, Pop!_OS; `sudo dnf install curl` on
+Fedora; `sudo pacman -S curl` on Arch, EndeavourOS, CachyOS, Manjaro.)
 
-### 2. Install
+It checks itself, then asks in windows on a desktop (zenity or kdialog), else in the terminal, and
+puts everything in your home folder: the server in `~/.local/share/LimbusPrivateServer`, the
+command `limbus`, entries in your app menu - **Limbus Private Server**, **Limbus Manager** and
+**Limbus Mod Manager** - and the skins (limbus-skins, in a Python folder of its own; if Python is
+missing it offers your distribution's package). It checks for Steam, Limbus and Proton first.
+After that, the download can go. The `.tar.gz` is the same thing unpacked: `./install.sh` in it.
 
-```sh
-~/Games/LimbusPrivateServer/install.sh
-```
+### 2. The manager
 
-It asks in windows on a desktop (zenity or kdialog), else in the terminal, and puts everything in
-your home folder: the server in `~/.local/share/LimbusPrivateServer`, the command `limbus`, two
-entries in your app menu - **Limbus Private Server** and **Limbus Mod Manager** - and the skins
-(limbus-skins, in a Python folder of its own; if Python is missing it offers your distribution's
-package). It checks for Steam, Limbus and Proton first. After that, the unpacked folder can go.
+Type `limbus` in a terminal (or open **Limbus Manager**): a numbered menu - play, skins & allies
+(toggle them by number, `/name` to search), the mod menu, the server's tools, and the source on
+GitHub.
 
 ### 3. Play (every time)
 
-Open **Limbus Private Server** from your app menu, or type `limbus` in a terminal. It swaps the
+Open **Limbus Private Server** from your app menu, or `limbus play` (01 in the menu). It swaps the
 skins in (slow only the first time), starts the server and Limbus, attaches the patch, and puts
 the game's own files back when Limbus closes.
 
