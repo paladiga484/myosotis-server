@@ -10,6 +10,8 @@ public sealed record PlayRequest(string Mode);
 public sealed record JoinRequest(string Host, string? Token);
 public sealed record HostTest(string Host);
 public sealed record HostingRequest(bool On, string? Address);
+public sealed record AutoUpdateRequest(bool On);
+public sealed record UpdateCheckRequest(bool Force);
 
 /// <summary>
 /// The Windows app's window, served at GET /launcher: play here or on a friend's server, host
@@ -20,7 +22,7 @@ public sealed record HostingRequest(bool On, string? Address);
 [Route("launcher")]
 [LocalOnly]
 [LauncherEnabled]
-public sealed class LauncherController(Config config, LauncherService launcher) : ControllerBase
+public sealed class LauncherController(Config config, LauncherService launcher, Updater updater) : ControllerBase
 {
     [HttpGet("")]
     public ContentResult Page() => Content(LauncherPage.Html, "text/html; charset=utf-8");
@@ -89,6 +91,29 @@ public sealed class LauncherController(Config config, LauncherService launcher) 
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{logs}\"") { UseShellExecute = false });
         return Ok();
     }
+
+    /// <summary>What the menu shows about updates, and how a download is getting on. Never asks GitHub.</summary>
+    [HttpGet("api/update")]
+    public object Update() => updater.Status();
+
+    /// <summary>
+    /// Ask GitHub for the newest release: always with "force" (Update pressed), else only when a
+    /// check is due and switched on (the menu opening). A POST, so it needs X-Mirror like every write.
+    /// </summary>
+    [HttpPost("api/update/check")]
+    public async Task<object> CheckUpdate(UpdateCheckRequest? req) => await updater.CheckAsync(req?.Force ?? false);
+
+    [HttpPost("api/update/auto")]
+    public IActionResult AutoUpdate(AutoUpdateRequest req)
+    {
+        updater.SetAuto(req.On);
+        return Ok();
+    }
+
+    /// <summary>Download, check and unpack the newest release; GET api/update follows it.</summary>
+    [HttpPost("api/update")]
+    public IActionResult StartUpdate() =>
+        updater.Start() is { } error ? Fail(error, 409) : StatusCode(202, new { started = true });
 
     [HttpPost("api/quit")]
     public IActionResult Quit()

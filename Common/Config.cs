@@ -200,6 +200,13 @@ public sealed class LauncherConfig
     /// </summary>
     public bool ImportGameData { get; set; }
 
+    /// <summary>
+    /// This package's release, as its GitHub tag has it after "app-": 1.118.0, or 1.118.0-2 for a
+    /// second build. The package build fills it in; the app's updates compare it with GitHub's newest.
+    /// Empty (a development copy): no updates.
+    /// </summary>
+    public string Release { get; set; } = "";
+
     /// <summary>The app itself, started again to restart the server after a hosting change.</summary>
     public string AppPath { get; set; } = "../Limbus Private Server.exe";
 

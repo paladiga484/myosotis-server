@@ -81,14 +81,13 @@ builder.Services.AddScoped<MirrorDungeonRepository>();
 builder.Services.AddScoped<StoryDungeonRepository>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddSingleton<Server.Launcher.LauncherService>();
+builder.Services.AddSingleton<Server.Launcher.Updater>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<Server.Launcher.LauncherService>());
 
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// limbus-skins' Black Forest unlock follows what is open, from the start
-Server.BlackForest.For(config);
 
 if (gameDataNote is not null)
     Log.Information("{Note}", gameDataNote);

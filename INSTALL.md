@@ -41,11 +41,19 @@ GitHub.
 
 Open **Limbus Private Server** from your app menu, or `limbus play` (01 in the menu). It swaps the
 skins in (slow only the first time), starts the server and Limbus, attaches the patch, and puts
-the game's own files back when Limbus closes.
+the game's own files back when Limbus closes. Once the patch is in, the manager opens - in the
+same terminal, or in a terminal window of its own when you started from the app menu.
 
 `limbus help` lists the rest: `limbus menu` (the mod menu, while it runs), `limbus check`,
-`limbus plain` (no skins), `limbus skins list`, `limbus uninstall` (keeps your save unless you
-say otherwise).
+`limbus plain` (no skins), `limbus skins list`, `limbus update`, `limbus uninstall` (keeps your
+save unless you say otherwise).
+
+### Updates
+
+`limbus update`, or **U** in the manager: the newest release from this repository, checked
+against both its `.sha256` and GitHub's own checksum, installed over yours (save, skins and
+settings stay). The manager asks GitHub when it opens, at most twice a day, and says when there's
+something newer; its Update page switches that off. Nothing installs until you say so.
 
 Without installing, everything also runs from the unpacked folder: `./play.sh check`, `./play.sh`.
 
@@ -68,7 +76,9 @@ $d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="
 ```
 
 Press **Play** in the window. If Windows says "Windows protected your PC": More info, Run anyway
-(the app isn't signed). **Mod menu** at the bottom of the window edits your save.
+(the app isn't signed). **Mod menu** at the bottom of the window edits your save. Once you're in,
+the manager opens in a console window (**Manager** in the window opens it any time); **U** there
+updates the app the same way as on Linux, with the server checking the download first.
 
 ### 3. Skins (optional): Python, then limbus-skins
 
