@@ -1,8 +1,8 @@
 # Install in one-liners
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
-to install, one to play. Made for **Limbus 1.118.0**: the server package `app-1.118.0` and
-limbus-skins 1.5.0. Your Steam copy of Limbus is never modified.
+to install, one to play. Made for **Limbus 1.118.0**: the server package `app-1.118.0-2` and
+limbus-skins 1.6.0. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
 then close it.
@@ -17,7 +17,7 @@ details, and `check` (below) says what it can't find.
 ### 1. Download and install - one file
 
 ```sh
-cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0/LimbusPrivateServer-Linux-1.118.0.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.run.sha256 && bash LimbusPrivateServer-Linux-1.118.0.run
+cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0-2/LimbusPrivateServer-Linux-1.118.0.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0-2/LimbusPrivateServer-Linux-1.118.0.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.0.run.sha256 && bash LimbusPrivateServer-Linux-1.118.0.run
 ```
 
 (Or download the `.run` from the release page and double-click it - choose Run if asked. `curl` is
@@ -66,7 +66,7 @@ Open **PowerShell** (Start menu, type "PowerShell").
 ### 1. Install the server package, checked against its checksum
 
 ```powershell
-$d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0"; $f="LimbusPrivateServer-Windows-1.118.0.zip"; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; Expand-Archive $f -DestinationPath . -Force; "ok: $d\LimbusPrivateServer"
+$d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.0-2"; $f="LimbusPrivateServer-Windows-1.118.0.zip"; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; Expand-Archive $f -DestinationPath . -Force; "ok: $d\LimbusPrivateServer"
 ```
 
 ### 2. Play without skins
@@ -83,10 +83,13 @@ updates the app the same way as on Linux, with the server checking the download 
 ### 3. Skins (optional): Python, then limbus-skins
 
 ```powershell
-winget install -e --id Python.Python.3.12; cd "$HOME\Games"; iwr https://github.com/paladiga484/limbus-skins/releases/download/v1.4.0/limbus_skins-1.4.0-py3-none-any.whl -OutFile limbus_skins-1.4.0-py3-none-any.whl; py -m pip install --user .\limbus_skins-1.4.0-py3-none-any.whl; py -m limbus_skins on all
+winget install -e --id Python.Python.3.12; cd "$HOME\Games"; iwr https://github.com/paladiga484/limbus-skins/releases/download/v1.6.0/limbus_skins-1.6.0-py3-none-any.whl -OutFile limbus_skins-1.6.0-py3-none-any.whl; py -m pip install --user .\limbus_skins-1.6.0-py3-none-any.whl; py -m limbus_skins on all
 ```
 
 (Close and reopen PowerShell after installing Python if `py` isn't found.)
+
+Had an older limbus-skins? Run `py -m limbus_skins restore` once, with Limbus closed: it puts back
+anything an older version left in your game's own files. From 1.6.0 on, skins never touch them.
 
 ### 4. Play with skins (every time)
 
