@@ -12,7 +12,7 @@ public partial class ApiController
     {
         var uid = HttpContext.GetUid();
         // identities of our own (limbus-skins): granted while this client has them, out of sight otherwise
-        var active = OwnIdentities.Active(_config, uid, BlackForest.IsLocal(HttpContext));
+        var active = OwnIdentities.Active(_config, uid, Tweak.LocalOnlyAttribute.IsLoopback(HttpContext));
         var known = _staticData.KnownPersonalities;
         if (active.Count > 0 && (await _personalities.SyncNewAsync(uid, active.ToList())).Count > 0)
             _db.Invalidate(uid);

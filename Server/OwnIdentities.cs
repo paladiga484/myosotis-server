@@ -7,10 +7,10 @@ namespace Server;
 /// Identities of our own (limbus-skins "identity" skins: Vergilius as 10799, Kali as 10499): new
 /// ids cloned into the client's static data. Only a client that has them may see them, so they
 /// are granted only while all of this holds:
-///   - a limbus-skins session is applied on this machine (its active.json lists the shared
-///     static-data file, which carries the clones) and its helpers manifest lists them;
+///   - a limbus-skins session is applied on this machine (its session.json - or an older
+///     version's active.json - lists the shared static-data file, which carries the clones) and
+///     its helpers manifest lists them;
 ///   - the request comes from this machine (a friend's client over Tailscale has stock files);
-///   - for Kali, the account's Black Forest is open.
 /// Otherwise every id the server's own game data doesn't know is kept out of what the client
 /// sees - failing closed, with no memory to lose - and a formation slot or battle result holding
 /// one shows the sinner's default identity. Nothing is ever deleted from the save.
@@ -21,7 +21,7 @@ public static class OwnIdentities
 {
     public sealed record Own(int Id, int Base, string? Unlock);
 
-    /// <summary>limbus-skins' data folder (active.json, stock/, built/).</summary>
+    /// <summary>limbus-skins' data folder (session.json, built/; an older version's active.json, stock/).</summary>
     internal static string DataDir()
     {
         var data = Environment.GetEnvironmentVariable("MYOSOTIS_SKINS_DATA");
@@ -30,13 +30,18 @@ public static class OwnIdentities
             : data;
     }
 
-    /// <summary>A limbus-skins session has the shared static-data file swapped in right now.</summary>
-    static bool SessionApplied()
+    /// <summary>A limbus-skins session has the shared static-data file in right now: session.json
+    /// (limbus-skins 1.6+: in the client patch's modcache, the game's own files untouched), or an
+    /// older version's active.json (a swap into the game's cache).</summary>
+    static bool SessionApplied() => ListsHelpers("session.json") || ListsHelpers("active.json");
+
+    static bool ListsHelpers(string file)
     {
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(DataDir(), "active.json")));
-            return doc.RootElement.TryGetProperty("mods", out var mods) && mods.ValueKind == JsonValueKind.Array
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(DataDir(), file)));
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("mods", out var mods) && mods.ValueKind == JsonValueKind.Array
                 && mods.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.String && m.GetString() == "helpers");
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
@@ -71,10 +76,7 @@ public static class OwnIdentities
     {
         if (!local || !SessionApplied())
             return [];
-        return Built()
-            .Where(o => o.Unlock is null || (o.Unlock == "black-forest" && BlackForest.For(config).IsOpen(uid)))
-            .Select(o => o.Id)
-            .ToHashSet();
+        return Built().Where(o => o.Unlock is null).Select(o => o.Id).ToHashSet();
     }
 
     /// <summary>The id the client may be shown in place of `id`: itself if the game data knows it
