@@ -27,13 +27,15 @@ public sealed class PersonalityRepository(
     }
 
     public async Task<bool> UpdateAsync(
-        long uid, int personalityId, int? level = null, int? gacksung = null, int? gacksungIllustType = null)
+        long uid, int personalityId, int? level = null, int? gacksung = null, int? gacksungIllustType = null,
+        int? exp = null)
     {
         var row = await Db.UserPersonalities.FirstOrDefaultAsync(x => x.Uid == uid && x.PersonalityId == personalityId);
         if (row is null)
             return true;
 
         if (level is not null) row.Level = level.Value;
+        if (exp is not null) row.Exp = exp.Value;
         if (gacksung is not null) row.Gacksung = gacksung.Value;
         if (gacksungIllustType is not null) row.GacksungIllustType = gacksungIllustType.Value;
         return await SaveAsync(uid);

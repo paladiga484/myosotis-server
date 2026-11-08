@@ -87,6 +87,18 @@ public sealed class StaticDataService
         return best;
     }
 
+    /// <summary>EXP from level n to n+1 is PersonalityExpTable[n-1] (common-data personalityLevelTable).</summary>
+    public IReadOnlyList<int> PersonalityExpTable { get; private set; } = [];
+    /// <summary>The highest identity level the story can open (common-data maxlevelbystoryprogress).</summary>
+    public int PersonalityMaxLevel { get; private set; } = Common.SeedValues.PersonalityLevel;
+    /// <summary>Enkephalin one Enkephalin Module costs (common-data enkephalinForAModule).</summary>
+    public int EnkephalinForAModule { get; private set; } = 20;
+    /// <summary>How many items one use may spend at most (common-data maxNumberOfItemsOnceUsed).</summary>
+    public int MaxItemsOnceUsed { get; private set; } = 400;
+    /// <summary>Identity growth items: item id -> ("PERSONALITY_EXP" or "PERSONALITY_LEVEL_TO", value).</summary>
+    public IReadOnlyDictionary<int, (string Type, int Value)> PersonalityGrowthItems { get; private set; }
+        = new Dictionary<int, (string, int)>();
+
     public IReadOnlyList<ChanceFormat> Chances { get; private set; } = [];
     public BattlePassFormat? BattlePass { get; private set; }
     public IReadOnlyList<MainChapterStateFormat> MainChapterStates { get; private set; } = [];
@@ -130,6 +142,7 @@ public sealed class StaticDataService
         _iapProducts = await LoadIapProductsAsync();
         _danteAbilityIds = await LoadDanteAbilityIdsAsync();
 
+        await LoadGrowthRulesAsync();
         Chances = await LoadChancesAsync();
         BattlePass = await LoadBattlePassAsync();
         UnlockCodes = _unlockCodeIds.Select(id => new UnlockCodeFormat { unlockcode = id }).ToList();
@@ -141,6 +154,77 @@ public sealed class StaticDataService
             "StaticData loaded: {Personalities} personalities, {Egos} egos, {Items} items, {Announcers} announcers, {Banners} banners, {UnlockCodes} unlock codes, {Chances} chances, {Gachas} gacha files",
             _personalityIds.Count, _egoIds.Count, _itemIds.Count, _announcerIds.Count,
             _userBannerIds.Count, _unlockCodeIds.Count, Chances.Count, _gacha.Count);
+    }
+
+    /// <summary>
+    /// The identity EXP curve, the level cap, the module price and which items grow an identity -
+    /// all read from the game's own data so the server levels identities exactly as the client
+    /// draws them. A missing or unreadable file keeps the defaults (and EXP items then do nothing).
+    /// </summary>
+    private async Task LoadGrowthRulesAsync()
+    {
+        foreach (var path in EnumerateJson("common-data").OrderByDescending(p => p, StringComparer.Ordinal))
+        {
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                using var doc = await JsonDocument.ParseAsync(stream);
+                var r = doc.RootElement;
+                if (r.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
+                    r = list[0];
+                if (!r.TryGetProperty("personalityLevelTable", out var plt)
+                    || !plt.TryGetProperty("expTable", out var et) || et.ValueKind != JsonValueKind.Array)
+                    continue;
+                PersonalityExpTable = et.EnumerateArray().Select(e => e.GetInt32()).ToList();
+                if (r.TryGetProperty("maxlevelbystoryprogress", out var ml) && ml.ValueKind == JsonValueKind.Array)
+                {
+                    var caps = ml.EnumerateArray().Where(x => x.TryGetProperty("maxlevel", out _))
+                        .Select(x => x.GetProperty("maxlevel").GetInt32()).ToList();
+                    if (caps.Count > 0)
+                        PersonalityMaxLevel = Math.Min(caps.Max(), PersonalityExpTable.Count + 1);
+                }
+                if (r.TryGetProperty("enkephalinForAModule", out var em) && em.TryGetInt32(out var e1) && e1 > 0)
+                    EnkephalinForAModule = e1;
+                if (r.TryGetProperty("maxNumberOfItemsOnceUsed", out var mi) && mi.TryGetInt32(out var m1) && m1 > 0)
+                    MaxItemsOnceUsed = m1;
+                break;
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or FormatException)
+            {
+                _logger.LogWarning(ex, "Couldn't read growth rules from {Path}", path);
+            }
+        }
+
+        var growth = new Dictionary<int, (string, int)>();
+        foreach (var path in EnumerateJson("item"))
+        {
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                using var doc = await JsonDocument.ParseAsync(stream);
+                if (!doc.RootElement.TryGetProperty("list", out var items) || items.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("id", out var idEl) || !item.TryGetProperty("itemUseFuncs", out var funcs)
+                        || funcs.ValueKind != JsonValueKind.Array || funcs.GetArrayLength() != 1)
+                        continue;                       // the plain tickets have exactly one effect
+                    var f = funcs[0];
+                    var type = f.TryGetProperty("itemUseFuncType", out var ty) ? ty.GetString() : null;
+                    if (type is "PERSONALITY_EXP" or "PERSONALITY_LEVEL_TO"
+                        && f.TryGetProperty("itemUseFuncValue", out var v) && v.TryGetInt32(out var value))
+                        growth[idEl.GetInt32()] = (type, value);
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or FormatException)
+            {
+                _logger.LogWarning(ex, "Couldn't read item uses from {Path}", path);
+            }
+        }
+        PersonalityGrowthItems = growth;
+        _logger.LogInformation(
+            "Identity growth: {Levels}-step EXP table, cap level {Cap}, {Items} EXP/level items, a module costs {Cost} Enkephalin",
+            PersonalityExpTable.Count, PersonalityMaxLevel, growth.Count, EnkephalinForAModule);
     }
 
     private async Task<Dictionary<int, int>> LoadPersonalitySeasonsAsync()
