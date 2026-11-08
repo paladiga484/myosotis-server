@@ -18,6 +18,12 @@ public partial class ApiController
             _logger.LogWarning("ReEnterMirrorDungeon with no run stored for uid {Uid}", uid);
             return StatusCode(StatusCodes.Status400BadRequest);
         }
+        if (MirrorDungeonState.NeverStarted(save))
+        {
+            _logger.LogWarning("ReEnterMirrorDungeon for uid {Uid}: the run never got a party - forgotten, enter again", uid);
+            await _mirrorSaves.ClearSaveAsync(uid);
+            return StatusCode(StatusCodes.Status400BadRequest);
+        }
 
         _logger.LogInformation(
             "MD resumed by uid {Uid}: dungeon {DungeonId} type {TypeIndex}, {Nodes} nodes, {Cleared} floors cleared",

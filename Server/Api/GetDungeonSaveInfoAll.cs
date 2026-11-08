@@ -16,7 +16,14 @@ public partial class ApiController
         // A real run if one is in progress, otherwise the "nothing here" shape the client expects.
         // Returning the stub unconditionally is what stopped it offering to resume.
         var uid = HttpContext.GetUid();
-        var mirrorSave = await _mirrorSaves.GetSaveAsync(uid) ?? new MirrorDungeonSaveInfoFormat
+        var stored = await _mirrorSaves.GetSaveAsync(uid);
+        if (stored is not null && Server.MirrorDungeon.MirrorDungeonState.NeverStarted(stored))
+        {
+            _logger.LogWarning("MD run for uid {Uid} never got a party: forgotten, so the menu offers a fresh run", uid);
+            await _mirrorSaves.ClearSaveAsync(uid);
+            stored = null;
+        }
+        var mirrorSave = stored ?? new MirrorDungeonSaveInfoFormat
         {
             dungeonId = -1,
             idx = -1,

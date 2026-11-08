@@ -31,6 +31,15 @@ public static class MirrorDungeonState
         info.upids = info.prevdul.Select(u => u.pid).Where(pid => pid != 0).ToList();
     }
 
+    /// <summary>
+    /// A run that never got its party (no units chosen, no floor cleared). The client can't resume
+    /// one - it builds the map's node UI from the party and throws, which leaves a black screen -
+    /// so the server forgets it and the player simply enters again. A run with a party, or with
+    /// any floor cleared, is kept as it is.
+    /// </summary>
+    public static bool NeverStarted(MirrorDungeonSaveInfoFormat save) =>
+        (save.currentInfo?.dul?.Count ?? 0) == 0 && (save.currentInfo?.cfs?.Count ?? 0) == 0;
+
     /// <summary>Which floor a node id belongs to, using the encoding the generator applies.</summary>
     public static int FloorOf(MirrorDungeonSaveInfoFormat save, int nodeId) =>
         save.dungeonMap.ns.FirstOrDefault(n => n.nid == nodeId)?.f ?? 0;
