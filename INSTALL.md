@@ -1,7 +1,7 @@
 # Install in one-liners
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
-to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-3` and
+to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-4` and
 limbus-skins 1.7.0. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
@@ -17,7 +17,7 @@ details, and `check` (below) says what it can't find.
 ### 1. Download and install - one file
 
 ```sh
-cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
+cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-4/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-4/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
 ```
 
 (Or download the `.run` from the release page and double-click it - choose Run if asked. `curl` is
@@ -63,7 +63,7 @@ Without installing, everything also runs from the unpacked folder: `./play.sh ch
 
 ### 1. Install
 
-Download **[LimbusPrivateServer-Setup-1.118.1.exe](https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Setup-1.118.1.exe)**
+Download **[LimbusPrivateServer-Setup-1.118.1.exe](https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-4/LimbusPrivateServer-Setup-1.118.1.exe)**
 and run it. If Windows says "Windows protected your PC": More info, Run anyway (it isn't signed).
 Press **Install**: no administrator needed, and it adds a Start menu entry, a desktop shortcut and an
 Uninstall in "Installed apps". It checks itself before writing anything.
@@ -71,7 +71,7 @@ Uninstall in "Installed apps". It checks itself before writing anything.
 Or the same from **PowerShell**, checked against the release's checksum first:
 
 ```powershell
-$u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3"; $f="LimbusPrivateServer-Setup-1.118.1.exe"; cd $env:TEMP; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; & ".\$f"
+$u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-4"; $f="LimbusPrivateServer-Setup-1.118.1.exe"; cd $env:TEMP; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; & ".\$f"
 ```
 
 ### 2. Play without skins
@@ -81,33 +81,11 @@ window edits your save. Once you're in, the manager opens in a console window (*
 window opens it any time). Updates: the app's **Update** fetches the next Setup and runs it; your save,
 keys and friend settings stay.
 
-### 3. Skins (optional): Python, then limbus-skins
+### 3. Skins
 
-```powershell
-winget install -e --id Python.Python.3.12; cd "$HOME\Games"; iwr https://github.com/paladiga484/limbus-skins/releases/download/v1.7.0/limbus_skins-1.7.0-py3-none-any.whl -OutFile limbus_skins-1.7.0-py3-none-any.whl; py -m pip install --user .\limbus_skins-1.7.0-py3-none-any.whl; py -m limbus_skins on all
-```
-
-(Close and reopen PowerShell after installing Python if `py` isn't found.)
-
-Had an older limbus-skins? Run `py -m limbus_skins restore` once, with Limbus closed: it puts back
-anything an older version left in your game's own files. From 1.6.0 on, skins never touch them.
-
-### 4. Play with skins (every time)
-
-```powershell
-py -m limbus_skins run --yes -- "$HOME\Games\LimbusPrivateServer\Limbus Private Server.exe"
-```
-
-Press **Play** in the window; the skins come off again when Limbus closes.
-
-### 5. Alias (optional): `limbus` in every PowerShell
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force; if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Force $PROFILE | Out-Null }; Add-Content $PROFILE 'function limbus { py -m limbus_skins run --yes -- "$HOME\Games\LimbusPrivateServer\Limbus Private Server.exe" }'; . $PROFILE
-```
-
-The first part lets PowerShell load your own profile (it blocks scripts by default). Then
-`limbus` plays.
+Built in: the installer brings its own Python and limbus-skins. Leave **Turn every skin on** ticked
+while installing, or pick them later with **Skins** in the app. The first Play with skins builds them
+(a few minutes, once); they come off again when Limbus closes. Nothing else to install.
 
 ---
 
