@@ -1,8 +1,8 @@
 # Install in one-liners
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
-to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-5` and
-limbus-skins 1.7.1. Your Steam copy of Limbus is never modified.
+to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-6` and
+limbus-skins 1.7.2. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
 then close it.
@@ -17,7 +17,7 @@ details, and `check` (below) says what it can't find.
 ### 1. Download and install - one file
 
 ```sh
-cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-5/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-5/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
+cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-6/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-6/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
 ```
 
 (Or download the `.run` from the release page and double-click it - choose Run if asked. `curl` is
@@ -63,7 +63,7 @@ Without installing, everything also runs from the unpacked folder: `./play.sh ch
 
 ### 1. Install
 
-Download **[LimbusPrivateServer-Setup-1.118.1.exe](https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-5/LimbusPrivateServer-Setup-1.118.1.exe)**
+Download **[LimbusPrivateServer-Setup-1.118.1.exe](https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-6/LimbusPrivateServer-Setup-1.118.1.exe)**
 and run it. If Windows says "Windows protected your PC": More info, Run anyway (it isn't signed).
 Press **Install**: no administrator needed, and it adds a Start menu entry, a desktop shortcut and an
 Uninstall in "Installed apps". It checks itself before writing anything.
@@ -71,7 +71,7 @@ Uninstall in "Installed apps". It checks itself before writing anything.
 Or the same from **PowerShell**, checked against the release's checksum first:
 
 ```powershell
-$u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-5"; $f="LimbusPrivateServer-Setup-1.118.1.exe"; cd $env:TEMP; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; & ".\$f"
+$u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-6"; $f="LimbusPrivateServer-Setup-1.118.1.exe"; cd $env:TEMP; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; & ".\$f"
 ```
 
 ### 2. Play without skins
