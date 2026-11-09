@@ -334,7 +334,8 @@ static void splash_close(void)
 static const wchar_t *GITHUB = L"https://github.com/paladiga484";
 static const wchar_t *TWEAK = L"http://127.0.0.1:3000/tweak";
 enum { ID_STATUS = 100, ID_PLAY, ID_JOINPLAY, ID_CANCEL, ID_HOST, ID_TOKEN, ID_SAVE, ID_TEST, ID_HOSTING,
-       ID_HOSTADDR, ID_MODMENU, ID_LOGS, ID_GITHUB, ID_QUIT, ID_MANAGER, ID_TIMER = 1 };
+       ID_HOSTADDR, ID_MODMENU, ID_LOGS, ID_GITHUB, ID_QUIT, ID_MANAGER, ID_SKINS, ID_TIMER = 1 };
+enum { WM_SKINS_READY = WM_APP + 5 };
 static HWND win, status_label, host_label;
 static void open_console_menu(void);
 static HFONT ui_font;
@@ -501,16 +502,455 @@ static void open_mod_menu(void)
     ShellExecuteW(NULL, L"open", TWEAK, NULL, NULL, SW_SHOWNORMAL);
 }
 
+/* ---- skins: limbus-skins on the package's own Python (python\), as play.sh does on Linux ----
+ * Before Play: the last session's skins out, this one's in (built first after a game or
+ * limbus-skins update - minutes, once), the client patch set for them, and a watcher that takes
+ * them out once Limbus closes. The game's own files are never changed. A skins problem never
+ * stops you playing: you're asked whether to play without them. */
+static wchar_t python_exe[MAX_PATH], pythonw_exe[MAX_PATH];
+static volatile LONG skins_busy;
+
+static int have_skins(void)
+{
+    return python_exe[0] && exists(python_exe);
+}
+
+/* limbus-skins <args>, out of sight, from this folder; the start of its output (UTF-8) in out.
+ * Its exit code, or -1. */
+static int skins_run(const wchar_t *args, char *out, int cap)
+{
+    out[0] = 0;
+    wchar_t cmd[32768];
+    if (!have_skins() || _snwprintf(cmd, 32768, L"\"%ls\" -I -X utf8 -m limbus_skins %ls", python_exe, args) < 0)
+        return -1;
+    SECURITY_ATTRIBUTES sa = {sizeof sa, NULL, TRUE};
+    HANDLE rd, wr;
+    if (!CreatePipe(&rd, &wr, &sa, 0))
+        return -1;
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof si);
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = si.hStdError = wr;
+    BOOL ok = CreateProcessW(python_exe, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, here, &si, &pi);
+    CloseHandle(wr);
+    if (!ok) {
+        CloseHandle(rd);
+        return -1;
+    }
+    int got = 0;
+    DWORD r;
+    char buf[4096];
+    while (ReadFile(rd, buf, sizeof buf, &r, NULL) && r > 0) {
+        int take = (int)r < cap - 1 - got ? (int)r : cap - 1 - got;
+        if (take > 0) {
+            memcpy(out + got, buf, take);
+            got += take;
+        }
+    }
+    out[got] = 0;
+    CloseHandle(rd);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return (int)code;
+}
+
+/* The last few lines of text, for a message box. */
+static const char *last_lines(const char *text, int lines)
+{
+    const char *p = text + strlen(text);
+    while (p > text && (p[-1] == '\n' || p[-1] == '\r')) p--;
+    while (p > text && lines > 0)
+        if (*--p == '\n') lines--;
+    return p == text ? p : p + 1;
+}
+
+/* Take the skins out once Limbus closes: limbus-skins watch, on its own (it outlives this app). */
+static void skins_watch(void)
+{
+    wchar_t cmd[MAX_PATH * 2];
+    if (_snwprintf(cmd, MAX_PATH * 2, L"\"%ls\" -I -X utf8 -m limbus_skins watch", pythonw_exe) < 0)
+        return;
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof si);
+    si.cb = sizeof si;
+    if (CreateProcessW(pythonw_exe, cmd, NULL, NULL, FALSE, DETACHED_PROCESS | CREATE_NO_WINDOW, NULL, here, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+static void skins_off(int join)
+{
+    static char outb[8192];
+    wchar_t args[MAX_PATH + 32];
+    if (_snwprintf(args, MAX_PATH + 32, L"client --off \"%ls%ls\"", here, join ? L"join" : L"client") > 0)
+        skins_run(args, outb, sizeof outb);
+}
+
+/* The skins for a Play (join: on a friend's server - its client patch folder). 1 when they're in
+ * (or none are on, or the package has no skins); 0 with the reason in msg. */
+static int skins_prepare(int join, char *msg, int cap)
+{
+    static char outb[1 << 19];
+    wchar_t args[MAX_PATH + 64];
+    msg[0] = 0;
+    if (!have_skins())
+        return 1;
+    if (skins_run(L"restore", outb, sizeof outb) != 0) {
+        snprintf(msg, cap, "%s", outb[0] ? last_lines(outb, 6) : "limbus-skins didn't start");
+        return 0;
+    }
+    int any = skins_run(L"list --json", outb, sizeof outb) == 0 && strstr(outb, "\"on\":true") != NULL;
+    if (any) {
+        if (_snwprintf(args, MAX_PATH + 64, L"apply --yes --client \"%ls%ls\"", here, join ? L"join" : L"client") < 0)
+            return 0;
+        if (skins_run(args, outb, sizeof outb) != 0) {
+            snprintf(msg, cap, "%s", outb[0] ? last_lines(outb, 6) : "limbus-skins didn't start");
+            skins_run(L"restore", outb, sizeof outb);
+            return 0;
+        }
+        skins_watch();
+        if (_snwprintf(args, MAX_PATH + 64, L"client \"%ls%ls\"", here, join ? L"join" : L"client") > 0)
+            skins_run(args, outb, sizeof outb);
+    } else {
+        skins_off(join);
+    }
+    return 1;
+}
+
+static char skins_msg[4096];
+
+static DWORD WINAPI skins_thread(LPVOID join)
+{
+    int ok = skins_prepare((int)(INT_PTR)join, skins_msg, sizeof skins_msg);
+    PostMessageW(win, WM_SKINS_READY, (WPARAM)join, ok);
+    return 0;
+}
+
+/* After the skins' step: play, or ask whether to play without them. */
+static void play_now(int join)
+{
+    static char body[16384];
+    report(http("POST", "/launcher/api/play", join ? "{\"mode\":\"join\"}" : "{\"mode\":\"local\"}", body, sizeof body),
+           body, join ? L"Play on a friend's server" : L"Play");
+}
+
+static void skins_ready(int join, int ok)
+{
+    InterlockedExchange(&skins_busy, 0);
+    EnableWindow(GetDlgItem(win, ID_PLAY), TRUE);
+    EnableWindow(GetDlgItem(win, ID_JOINPLAY), TRUE);
+    if (!ok) {
+        wchar_t text[5000], why[4200];
+        if (MultiByteToWideChar(CP_UTF8, 0, skins_msg, -1, why, 4200) <= 0)
+            wcscpy(why, L"(no message)");
+        _snwprintf(text, 5000, L"The skins couldn't be put in:\n\n%ls\n\nPlay without skins?", why);
+        if (MessageBoxW(win, text, TITLE, MB_YESNO | MB_ICONWARNING) != IDYES)
+            return;
+        skins_off(join);
+    }
+    play_now(join);
+}
+
+static void play(int join)
+{
+    if (!have_skins()) {
+        play_now(join);
+        return;
+    }
+    if (InterlockedCompareExchange(&skins_busy, 1, 0))
+        return;
+    EnableWindow(GetDlgItem(win, ID_PLAY), FALSE);
+    EnableWindow(GetDlgItem(win, ID_JOINPLAY), FALSE);
+    SetWindowTextW(status_label, L"Skins: getting them ready (after an update this builds them - a few minutes)...");
+    HANDLE t = CreateThread(NULL, 0, skins_thread, (LPVOID)(INT_PTR)join, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    else
+        skins_ready(join, 1);
+}
+
+/* ---- the Skins window: every skin, a checkbox each ---- */
+
+typedef struct {
+    char key[64];
+    wchar_t key_w[64], sinner[40], becomes[120], kind[20];
+    int on, tested;
+} Skin;
+static Skin *skin_list;
+static int skin_count;
+static HWND skins_win, skins_view, skins_filter, skins_note;
+enum { SK_VIEW = 300, SK_FILTER, SK_ALLON, SK_ALLOFF, SK_SAVE, SK_CLOSE, SK_NOTE };
+
+static void wide(const char *utf8, wchar_t *out, int cap)
+{
+    if (MultiByteToWideChar(CP_UTF8, 0, utf8, -1, out, cap) <= 0)
+        out[0] = 0;
+}
+
+/* limbus-skins list --json: [{"key":..,"sinner":..,"kind":..,"becomes":..,"on":true,..},...] */
+static int skins_load(void)
+{
+    static char outb[1 << 20];
+    if (skins_run(L"list --json", outb, sizeof outb) != 0 || outb[0] != '[') {
+        wchar_t text[4400], why[4200];
+        wide(outb[0] ? last_lines(outb, 6) : "limbus-skins didn't start", why, 4200);
+        _snwprintf(text, 4400, L"The skins couldn't be listed:\n\n%ls", why);
+        MessageBoxW(skins_win ? skins_win : win, text, TITLE, MB_OK | MB_ICONWARNING);
+        return 0;
+    }
+    int n = 0;
+    for (const char *p = outb; (p = strchr(p, '{')); p++) n++;
+    free(skin_list);
+    skin_list = calloc(n ? n : 1, sizeof *skin_list);
+    skin_count = 0;
+    if (!skin_list)
+        return 0;
+    char obj[2048], v[512];
+    for (const char *p = strchr(outb, '{'); p && skin_count < n; p = strchr(p + 1, '{')) {
+        const char *e = strchr(p, '}');
+        if (!e || e - p >= (int)sizeof obj)
+            break;
+        memcpy(obj, p, e - p + 1);
+        obj[e - p + 1] = 0;
+        Skin *s = &skin_list[skin_count];
+        json_str(obj, "key", s->key, sizeof s->key);
+        if (!s->key[0])
+            continue;
+        wide(s->key, s->key_w, 64);
+        json_str(obj, "sinner", v, sizeof v); wide(v, s->sinner, 40);
+        json_str(obj, "becomes", v, sizeof v); wide(v, s->becomes, 120);
+        json_str(obj, "kind", v, sizeof v); wide(v, s->kind, 20);
+        s->on = strstr(obj, "\"on\":true") != NULL;
+        s->tested = strstr(obj, "\"tested\":true") != NULL;
+        skin_count++;
+    }
+    return 1;
+}
+
+static int skins_filling;
+
+static void skins_fill(void)
+{
+    wchar_t f[64];
+    GetWindowTextW(skins_filter, f, 64);
+    CharLowerW(f);
+    skins_filling = 1;
+    SendMessageW(skins_view, WM_SETREDRAW, FALSE, 0);
+    ListView_DeleteAllItems(skins_view);
+    int row = 0, on = 0;
+    for (int i = 0; i < skin_count; i++) {
+        Skin *s = &skin_list[i];
+        on += s->on;
+        if (f[0]) {
+            wchar_t hay[300];
+            _snwprintf(hay, 300, L"%ls %ls %ls %ls", s->key_w, s->sinner, s->becomes, s->kind);
+            CharLowerW(hay);
+            if (!wcsstr(hay, f))
+                continue;
+        }
+        LVITEMW it;
+        ZeroMemory(&it, sizeof it);
+        it.mask = LVIF_TEXT | LVIF_PARAM;
+        it.iItem = row;
+        it.pszText = s->key_w;
+        it.lParam = i;
+        int at = (int)SendMessageW(skins_view, LVM_INSERTITEMW, 0, (LPARAM)&it);
+        ListView_SetItemText(skins_view, at, 1, s->sinner);
+        ListView_SetItemText(skins_view, at, 2, s->becomes);
+        ListView_SetItemText(skins_view, at, 3, s->kind);
+        ListView_SetItemText(skins_view, at, 4, s->tested ? L"" : L"not yet seen in a fight");
+        ListView_SetCheckState(skins_view, at, s->on);
+        row++;
+    }
+    SendMessageW(skins_view, WM_SETREDRAW, TRUE, 0);
+    skins_filling = 0;
+    wchar_t note[200];
+    _snwprintf(note, 200, L"%d of %d on. Tick the ones you want, then Save; they're in from the next Play.", on, skin_count);
+    SetWindowTextW(skins_note, note);
+}
+
+/* limbus-skins <verb> <the keys with on == want != was>... */
+static int skins_save(void)
+{
+    static char outb[1 << 16];
+    static wchar_t args[32768];
+    static char said[1 << 16];
+    said[0] = 0;
+    /* the checkbox states as they were loaded: reload them to compare */
+    Skin *was = malloc(sizeof *was * (skin_count ? skin_count : 1));
+    if (!was)
+        return 0;
+    memcpy(was, skin_list, sizeof *was * skin_count);
+    int n_was = skin_count;
+    int ok = skins_load();
+    for (int pass = 0; ok && pass < 2; pass++) {            /* off first, then on */
+        int len = _snwprintf(args, 32768, pass ? L"on" : L"off"), any = 0;
+        for (int i = 0; i < n_was; i++) {
+            int now_on = 0;
+            for (int j = 0; j < skin_count; j++)
+                if (!strcmp(skin_list[j].key, was[i].key)) now_on = skin_list[j].on;
+            if (was[i].on == now_on || was[i].on != pass)
+                continue;
+            if (len + 70 >= 32768)
+                break;
+            len += _snwprintf(args + len, 32768 - len, L" %ls", was[i].key_w);
+            any = 1;
+        }
+        if (any) {
+            if (skins_run(args, outb, sizeof outb) != 0)
+                ok = 0;
+            if (strstr(outb, "off now"))
+                snprintf(said + strlen(said), sizeof said - strlen(said), "%s", outb);
+        }
+    }
+    free(was);
+    skins_load();
+    skins_fill();
+    if (said[0]) {
+        wchar_t text[4400];
+        wide(last_lines(said, 8), text, 4400);
+        MessageBoxW(skins_win, text, TITLE, MB_OK | MB_ICONINFORMATION);
+    }
+    return ok;
+}
+
+static LRESULT CALLBACK skins_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
+{
+    static char outb[1 << 16];
+    switch (msg) {
+    case WM_NOTIFY: {
+        NMHDR *h = (NMHDR *)lp;
+        if (h->idFrom == SK_VIEW && h->code == LVN_ITEMCHANGED && !skins_filling) {
+            NMLISTVIEW *v = (NMLISTVIEW *)lp;
+            if ((v->uChanged & LVIF_STATE) && ((v->uNewState ^ v->uOldState) & LVIS_STATEIMAGEMASK)
+                && v->lParam >= 0 && v->lParam < skin_count)
+                skin_list[v->lParam].on = ListView_GetCheckState(skins_view, v->iItem) ? 1 : 0;
+        }
+        return 0;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wp) == SK_FILTER && HIWORD(wp) == EN_CHANGE) {
+            skins_fill();
+            return 0;
+        }
+        if (HIWORD(wp) != BN_CLICKED)
+            break;
+        switch (LOWORD(wp)) {
+        case SK_ALLON:
+        case SK_ALLOFF:
+            skins_run(LOWORD(wp) == SK_ALLON ? L"on all" : L"off all", outb, sizeof outb);
+            if (skins_load())
+                skins_fill();
+            return 0;
+        case SK_SAVE:
+            if (!skins_save())
+                MessageBoxW(w, L"Some of the changes didn't save.", TITLE, MB_OK | MB_ICONWARNING);
+            return 0;
+        case SK_CLOSE:
+            DestroyWindow(w);
+            return 0;
+        }
+        break;
+    case WM_DESTROY:
+        skins_win = NULL;
+        return 0;
+    }
+    return DefWindowProcW(w, msg, wp, lp);
+}
+
+static HWND skins_control(const wchar_t *cls, const wchar_t *text, DWORD style, int x, int y, int cw, int ch, int id)
+{
+    HWND c = CreateWindowExW(wcscmp(cls, L"EDIT") == 0 ? WS_EX_CLIENTEDGE : 0, cls, text, WS_CHILD | WS_VISIBLE | style,
+                             x, y, cw, ch, skins_win, (HMENU)(INT_PTR)id, NULL, NULL);
+    SendMessageW(c, WM_SETFONT, (WPARAM)ui_font, TRUE);
+    return c;
+}
+
+static void open_skins(void)
+{
+    if (skins_win) {
+        SetForegroundWindow(skins_win);
+        return;
+    }
+    if (!have_skins()) {
+        MessageBoxW(win, L"This package has no skins (its python folder is missing). Install it again with "
+                    L"LimbusPrivateServer-Setup.exe.", TITLE, MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    HCURSOR c = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+    int ok = skins_load();
+    SetCursor(c);
+    if (!ok)
+        return;
+    static int registered;
+    HINSTANCE inst = GetModuleHandleW(NULL);
+    if (!registered) {
+        INITCOMMONCONTROLSEX icc = {sizeof icc, ICC_LISTVIEW_CLASSES};
+        InitCommonControlsEx(&icc);
+        WNDCLASSW wc;
+        ZeroMemory(&wc, sizeof wc);
+        wc.lpfnWndProc = skins_proc;
+        wc.hInstance = inst;
+        wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
+        wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+        wc.lpszClassName = L"LimbusPrivateServerSkins";
+        RegisterClassW(&wc);
+        registered = 1;
+    }
+    RECT r = {0, 0, 720, 520};
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    AdjustWindowRect(&r, style, FALSE);
+    skins_win = CreateWindowExW(0, L"LimbusPrivateServerSkins", L"Skins - Limbus Private Server", style,
+                                CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, win, NULL, inst, NULL);
+    if (!skins_win)
+        return;
+    skins_control(L"STATIC", L"Search:", SS_LEFT, 12, 15, 60, 20, 0);
+    skins_filter = skins_control(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, 72, 11, 300, 24, SK_FILTER);
+    skins_control(L"BUTTON", L"All &on", WS_TABSTOP | BS_PUSHBUTTON, 444, 10, 82, 26, SK_ALLON);
+    skins_control(L"BUTTON", L"All o&ff", WS_TABSTOP | BS_PUSHBUTTON, 532, 10, 82, 26, SK_ALLOFF);
+    skins_view = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_SINGLESEL,
+                                 12, 44, 696, 420, skins_win, (HMENU)SK_VIEW, inst, NULL);
+    SendMessageW(skins_view, WM_SETFONT, (WPARAM)ui_font, TRUE);
+    ListView_SetExtendedListViewStyle(skins_view, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    static const wchar_t *cols[] = {L"Skin", L"Sinner", L"Becomes", L"Kind", L"Note"};
+    static const int widths[] = {170, 100, 210, 70, 140};
+    for (int i = 0; i < 5; i++) {
+        LVCOLUMNW col;
+        ZeroMemory(&col, sizeof col);
+        col.mask = LVCF_TEXT | LVCF_WIDTH;
+        col.pszText = (wchar_t *)cols[i];
+        col.cx = widths[i];
+        SendMessageW(skins_view, LVM_INSERTCOLUMNW, i, (LPARAM)&col);
+    }
+    skins_note = skins_control(L"STATIC", L"", SS_LEFT, 12, 478, 480, 36, SK_NOTE);
+    skins_control(L"BUTTON", L"&Save", WS_TABSTOP | BS_DEFPUSHBUTTON, 532, 478, 82, 28, SK_SAVE);
+    skins_control(L"BUTTON", L"&Close", WS_TABSTOP | BS_PUSHBUTTON, 620, 478, 88, 28, SK_CLOSE);
+    skins_fill();
+    ShowWindow(skins_win, SW_SHOWNORMAL);
+    SetFocus(skins_filter);
+}
+
 static void command(int id)
 {
     static char body[16384];
     char json[1200], host[512], token[512];
     switch (id) {
     case ID_PLAY:
-        report(http("POST", "/launcher/api/play", "{\"mode\":\"local\"}", body, sizeof body), body, L"Play");
-        break;
     case ID_JOINPLAY:
-        report(http("POST", "/launcher/api/play", "{\"mode\":\"join\"}", body, sizeof body), body, L"Play on a friend's server");
+        play(id == ID_JOINPLAY);
+        break;
+    case ID_SKINS:
+        open_skins();
         break;
     case ID_CANCEL:
         http("POST", "/launcher/api/cancel", NULL, body, sizeof body);
@@ -597,11 +1037,14 @@ static void build(void)
     control(L"BUTTON", L"Hosting", G, 10, 204, 500, 56, 0);
     control(L"BUTTON", L"&Host for friends (over Tailscale)", WS_TABSTOP | BS_AUTOCHECKBOX, 22, 226, 230, 24, ID_HOSTING);
     host_label = control(L"STATIC", L"", SS_LEFT, 260, 230, 240, 20, ID_HOSTADDR);
-    control(L"BUTTON", L"Mana&ger", B, 10, 272, 93, 30, ID_MANAGER);
-    control(L"BUTTON", L"&Mod menu", B, 111, 272, 93, 30, ID_MODMENU);
-    control(L"BUTTON", L"Open &logs", B, 212, 272, 93, 30, ID_LOGS);
-    control(L"BUTTON", L"&GitHub", B, 313, 272, 93, 30, ID_GITHUB);
-    control(L"BUTTON", L"Stop &server", B, 414, 272, 96, 30, ID_QUIT);
+    control(L"BUTTON", L"Mana&ger", B, 10, 272, 78, 30, ID_MANAGER);
+    HWND skins_btn = control(L"BUTTON", L"S&kins", B, 94, 272, 78, 30, ID_SKINS);
+    if (!have_skins())                     /* a package without its own Python has no skins to pick */
+        ShowWindow(skins_btn, SW_HIDE);
+    control(L"BUTTON", L"&Mod menu", B, 178, 272, 78, 30, ID_MODMENU);
+    control(L"BUTTON", L"Open &logs", B, 262, 272, 78, 30, ID_LOGS);
+    control(L"BUTTON", L"&GitHub", B, 346, 272, 78, 30, ID_GITHUB);
+    control(L"BUTTON", L"Stop &server", B, 430, 272, 80, 30, ID_QUIT);
 }
 
 static LRESULT CALLBACK window_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
@@ -612,6 +1055,11 @@ static LRESULT CALLBACK window_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
             command(LOWORD(wp));
         return 0;
     case WM_TIMER:
+        if (!skins_busy)
+            refresh();
+        return 0;
+    case WM_SKINS_READY:
+        skins_ready((int)wp, (int)lp);
         refresh();
         return 0;
     case WM_CTLCOLORSTATIC:
@@ -658,7 +1106,7 @@ static void native_window(HINSTANCE inst)
     if (splash) splash_close();
     MSG m;
     while (GetMessageW(&m, NULL, 0, 0) > 0)
-        if (!IsDialogMessageW(win, &m)) {
+        if (!IsDialogMessageW(win, &m) && !(skins_win && IsDialogMessageW(skins_win, &m))) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
         }
@@ -1031,6 +1479,28 @@ static int restart_into_update(void)
     if (w)
         PostMessageW(w, WM_CLOSE, 0, 0);
     Sleep(800);
+    /* a downloaded installer (the release's Setup.exe) does the update itself, once this app has
+     * closed, and starts the new app */
+    wchar_t setup[MAX_PATH], dir[MAX_PATH], cmd[MAX_PATH * 3];
+    if (_snwprintf(setup, MAX_PATH, L"%lsupdate\\Setup.exe", here) > 0 && GetFileAttributesW(setup) != INVALID_FILE_ATTRIBUTES) {
+        wcsncpy(dir, here, MAX_PATH - 1);
+        dir[MAX_PATH - 1] = 0;
+        size_t len = wcslen(dir);
+        if (len > 3 && dir[len - 1] == L'\\')
+            dir[len - 1] = 0;
+        STARTUPINFOW si = {sizeof si};
+        PROCESS_INFORMATION pi;
+        if (_snwprintf(cmd, MAX_PATH * 3, L"\"%ls\" --update \"%ls\" --parent %lu", setup, dir,
+                       (unsigned long)GetCurrentProcessId()) > 0
+            && CreateProcessW(setup, cmd, NULL, NULL, FALSE, 0, NULL, dir, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            outf("  %sThe installer takes it from here and opens the new app.%s\n", GREEN, RST);
+            return 1;
+        }
+        outf("  %sThe installer didn't start - nothing was changed. Start the app again: it still works.%s\n", RED, RST);
+        return 0;
+    }
     int n = apply_staged();
     if (n < 0) {
         outf("  %sThe update couldn't be copied in (see above). Start the app again: it still works.%s\n", RED, RST);
@@ -1296,6 +1766,16 @@ static int console_menu(void)
         switch (act) {
         case A_PLAY:
         case A_JOIN:
+            if (have_skins()) {
+                static char why[4096];
+                outf("  %sskins: getting them ready (after an update this builds them - a few minutes)...%s\n", GREY, RST);
+                if (!skins_prepare(act == A_JOIN, why, sizeof why)) {
+                    outf("  %sThe skins couldn't be put in:%s\n%s\n\n  Play without skins? [y/n] ", RED, RST, why);
+                    if (in_line(b, sizeof b) < 0 || (b[0] != 'y' && b[0] != 'Y'))
+                        break;
+                    skins_off(act == A_JOIN);
+                }
+            }
             if (con_report(http("POST", "/launcher/api/play", act == A_PLAY ? "{\"mode\":\"local\"}" : "{\"mode\":\"join\"}",
                                 body, sizeof body), body, "Play"))
                 con_follow();
@@ -1398,6 +1878,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show)
     if (!slash)
         return 1;
     slash[1] = 0;
+    _snwprintf(python_exe, MAX_PATH, L"%lspython\\python.exe", here);
+    _snwprintf(pythonw_exe, MAX_PATH, L"%lspython\\pythonw.exe", here);
 
     if (wcsstr(cmdline, L"--menu")) {
         int rc = console_menu();

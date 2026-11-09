@@ -37,6 +37,8 @@ public sealed partial class Updater(Config config, ILogger<Updater> logger)
     private string UpdateDir =>
         Path.Combine(Path.GetDirectoryName(config.ResolvePath(config.Launcher.AppPath)) ?? config.ResolvePath(".."), "update");
     public string StagedDir => Path.Combine(UpdateDir, "staged");
+    /// <summary>A downloaded installer (the release's Setup.exe): the app hands the update to it.</summary>
+    public string StagedSetup => Path.Combine(UpdateDir, "Setup.exe");
 
     /// <summary>The release this package is: 1.118.0, or 1.118.0-2 for a second build.</summary>
     public string Current => config.Launcher.Release;
@@ -82,9 +84,13 @@ public sealed partial class Updater(Config config, ILogger<Updater> logger)
         if (Key(tag) is null)
             throw new InvalidDataException($"the newest release has an odd tag: {tag}");
         var version = Regex.Replace(tag.StartsWith("app-") ? tag[4..] : tag, @"-\d+$", "");
-        var asset = $"{Package}-Windows-{version}.zip";
         JsonNode? Find(string name) =>
             (rel["assets"] as JsonArray ?? []).FirstOrDefault(a => a?["name"]?.GetValue<string>() == name);
+        // the installer when the release has one (it updates in place, the Windows uninstall entry with
+        // it); the package zip otherwise
+        var asset = $"{Package}-Setup-{version}.exe";
+        if (Find(asset) is null || Find(asset + ".sha256") is null)
+            asset = $"{Package}-Windows-{version}.zip";
         var zip = Find(asset);
         var sums = Find(asset + ".sha256");
         if (zip is null || sums is null)
@@ -211,7 +217,7 @@ public sealed partial class Updater(Config config, ILogger<Updater> logger)
 
     private async Task FetchAsync(Release rel)
     {
-        var zip = Path.Combine(UpdateDir, "download.zip");
+        var zip = Path.Combine(UpdateDir, rel.Asset.EndsWith(".exe", StringComparison.Ordinal) ? "download.exe" : "download.zip");
         try
         {
             if (!Allowed(rel.Url) || !Allowed(rel.SumsUrl))
@@ -250,6 +256,16 @@ public sealed partial class Updater(Config config, ILogger<Updater> logger)
                     throw new InvalidDataException("the download doesn't match its checksum");
             }
 
+            if (rel.Asset.EndsWith(".exe", StringComparison.Ordinal))
+            {
+                if (Directory.Exists(StagedDir))
+                    Directory.Delete(StagedDir, true);
+                File.Move(zip, StagedSetup, true);
+                File.WriteAllText(Path.Combine(UpdateDir, "staged.txt"), rel.Tag);
+                Set("ready", $"{rel.Tag} is ready: the app restarts into it", 100);
+                logger.LogInformation("update: {Tag}'s installer downloaded and checked", rel.Tag);
+                return;
+            }
             Set("unpacking", "Unpacking");
             if (Directory.Exists(StagedDir))
                 Directory.Delete(StagedDir, true);
@@ -265,6 +281,7 @@ public sealed partial class Updater(Config config, ILogger<Updater> logger)
                                       or IOException or UnauthorizedAccessException)
         {
             try { if (Directory.Exists(StagedDir)) Directory.Delete(StagedDir, true); } catch (IOException) { }
+            try { File.Delete(StagedSetup); } catch (IOException) { }
             Set("failed", (e is TaskCanceledException ? "the download timed out" : e.Message) + " - nothing was changed");
             logger.LogWarning("update: {Why}", e.Message);
         }

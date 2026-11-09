@@ -1,0 +1,34 @@
+/* The installer's icon, version and manifest (asInvoker: no administrator prompt). version.h and
+ * app.ico are written by the package build (build-windows-package.sh). */
+#include <windows.h>
+#include "version.h"
+
+1 ICON "app.ico"
+1 RT_MANIFEST "app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION VERSION_NUM
+ PRODUCTVERSION VERSION_NUM
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "FileDescription", "Limbus Private Server Setup"
+      VALUE "ProductName", "Limbus Private Server"
+      VALUE "FileVersion", VERSION_STR
+      VALUE "ProductVersion", RELEASE_STR
+      VALUE "OriginalFilename", "LimbusPrivateServer-Setup.exe"
+      VALUE "InternalName", "setup"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

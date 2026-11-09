@@ -1,7 +1,7 @@
 # Install in one-liners
 
 Your own server on your own PC, with the client patch and (optionally) the skins: one command
-to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-2` and
+to install, one to play. Made for **Limbus 1.118.1**: the server package `app-1.118.1-3` and
 limbus-skins 1.7.0. Your Steam copy of Limbus is never modified.
 
 **First, on any system:** install Limbus through Steam, start it once up to the title screen,
@@ -17,7 +17,7 @@ details, and `check` (below) says what it can't find.
 ### 1. Download and install - one file
 
 ```sh
-cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-2/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-2/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
+cd ~/Downloads && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Linux-1.118.1.run && curl -fLO https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Linux-1.118.1.run.sha256 && sha256sum -c LimbusPrivateServer-Linux-1.118.1.run.sha256 && bash LimbusPrivateServer-Linux-1.118.1.run
 ```
 
 (Or download the `.run` from the release page and double-click it - choose Run if asked. `curl` is
@@ -59,26 +59,27 @@ Without installing, everything also runs from the unpacked folder: `./play.sh ch
 
 ---
 
-## Windows (PowerShell)
+## Windows
 
-Open **PowerShell** (Start menu, type "PowerShell").
+### 1. Install
 
-### 1. Install the server package, checked against its checksum
+Download **[LimbusPrivateServer-Setup-1.118.1.exe](https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3/LimbusPrivateServer-Setup-1.118.1.exe)**
+and run it. If Windows says "Windows protected your PC": More info, Run anyway (it isn't signed).
+Press **Install**: no administrator needed, and it adds a Start menu entry, a desktop shortcut and an
+Uninstall in "Installed apps". It checks itself before writing anything.
+
+Or the same from **PowerShell**, checked against the release's checksum first:
 
 ```powershell
-$d="$HOME\Games"; New-Item -ItemType Directory -Force $d | Out-Null; cd $d; $u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-2"; $f="LimbusPrivateServer-Windows-1.118.1.zip"; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; Expand-Archive $f -DestinationPath . -Force; "ok: $d\LimbusPrivateServer"
+$u="https://github.com/paladiga484/myosotis-server/releases/download/app-1.118.1-3"; $f="LimbusPrivateServer-Setup-1.118.1.exe"; cd $env:TEMP; iwr "$u/$f" -OutFile $f; iwr "$u/$f.sha256" -OutFile "$f.sha256"; if ((Get-FileHash $f).Hash -ne (Get-Content "$f.sha256").Split(' ')[0]) { throw "checksum mismatch - download again" }; & ".\$f"
 ```
 
 ### 2. Play without skins
 
-```powershell
-& "$HOME\Games\LimbusPrivateServer\Limbus Private Server.exe"
-```
-
-Press **Play** in the window. If Windows says "Windows protected your PC": More info, Run anyway
-(the app isn't signed). **Mod menu** at the bottom of the window edits your save. Once you're in,
-the manager opens in a console window (**Manager** in the window opens it any time); **U** there
-updates the app the same way as on Linux, with the server checking the download first.
+Open **Limbus Private Server** from the Start menu and press **Play**. **Mod menu** at the bottom of the
+window edits your save. Once you're in, the manager opens in a console window (**Manager** in the
+window opens it any time). Updates: the app's **Update** fetches the next Setup and runs it; your save,
+keys and friend settings stay.
 
 ### 3. Skins (optional): Python, then limbus-skins
 
