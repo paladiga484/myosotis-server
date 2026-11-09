@@ -136,7 +136,46 @@ if (config.Logging.LogBodies)
 app.UseMiddleware<UnknownPacketMiddleware>();
 app.UseMiddleware<AuthMiddleware>();
 app.MapControllers();
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception e) when (BindFailure(e) is { } taken)
+{
+    // Port taken by another program, or reserved by Windows (Hyper-V/WSL/Docker port ranges).
+    // The packages' app shows this file when the server stops before it is up.
+    var why = taken
+        ? $"Port {config.Server.Port} is already used by another program, so the server can't start.\n\n"
+          + "Close that program and open the app again. To see which one it is, run in a command prompt:\n"
+          + $"    netstat -ano | findstr :{config.Server.Port}"
+        : $"Windows won't let the server use port {config.Server.Port}: it is reserved (Hyper-V, WSL or Docker do this).\n\n"
+          + "Restarting Windows usually frees it. To check, run in a command prompt:\n"
+          + "    netsh int ipv4 show excludedportrange protocol=tcp";
+    Log.Fatal("{Why}", why);
+    Log.CloseAndFlush();
+    Console.Error.WriteLine(why);
+    if (config.Launcher.ImportGameData)
+        File.WriteAllText(config.ResolvePath("game-data-error.txt"), why);
+    Environment.Exit(4);
+}
+
+// Why the port couldn't be bound: true = another program has it, false = the OS refused it, null = not a bind failure.
+static bool? BindFailure(Exception? e)
+{
+    for (; e is not null; e = e.InnerException)
+    {
+        if (e is Microsoft.AspNetCore.Connections.AddressInUseException)
+            return true;
+        if (e is System.Net.Sockets.SocketException se)
+            return se.SocketErrorCode switch
+            {
+                System.Net.Sockets.SocketError.AddressAlreadyInUse => true,
+                System.Net.Sockets.SocketError.AccessDenied => false,
+                _ => null,
+            };
+    }
+    return null;
+}
 
 // The configured addresses this server can listen on now. Loopback always works; any other
 // address lets other machines in, so it has to be one this machine really has (its Tailscale or

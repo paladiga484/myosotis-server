@@ -13,7 +13,7 @@
  *
  * Build (any OS):  zig rc /fo app.res app.rc
  *                  zig cc -target x86_64-windows-gnu -O2 -municode -Wl,--subsystem,windows launcher.c \
- *                      app.res -lws2_32 -lshell32 -ladvapi32 -luser32 -lgdi32 -o "Limbus Private Server.exe"
+ *                      app.res -lws2_32 -liphlpapi -lshell32 -ladvapi32 -luser32 -lgdi32 -o "Limbus Private Server.exe"
  */
 #define WIN32_LEAN_AND_MEAN
 #ifndef UNICODE
@@ -24,6 +24,7 @@
 #endif
 #include <winsock2.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #include <shellapi.h>
 #include <commctrl.h>
 #include <ctype.h>
@@ -69,6 +70,40 @@ static int server_up(void)
 static int server_quit(void)
 {
     return server_proc && WaitForSingleObject(server_proc, 0) == WAIT_OBJECT_0;
+}
+
+/* The program listening on 127.0.0.1:PORT, by file name, into out; 0 if it can't be told. */
+static int port_owner(wchar_t *out, DWORD cap)
+{
+    ULONG size = 0;
+    out[0] = 0;
+    if (GetExtendedTcpTable(NULL, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != ERROR_INSUFFICIENT_BUFFER)
+        return 0;
+    MIB_TCPTABLE_OWNER_PID *t = malloc(size);
+    if (!t)
+        return 0;
+    DWORD pid = 0;
+    if (GetExtendedTcpTable(t, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) == NO_ERROR)
+        for (DWORD i = 0; i < t->dwNumEntries && !pid; i++)
+            if (ntohs((u_short)t->table[i].dwLocalPort) == PORT
+                && (t->table[i].dwLocalAddr == htonl(INADDR_LOOPBACK) || t->table[i].dwLocalAddr == INADDR_ANY))
+                pid = t->table[i].dwOwningPid;
+    free(t);
+    if (!pid)
+        return 0;
+    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    wchar_t path[MAX_PATH];
+    DWORD n = MAX_PATH;
+    int ok = p && QueryFullProcessImageNameW(p, 0, path, &n);
+    if (p)
+        CloseHandle(p);
+    const wchar_t *name = ok ? wcsrchr(path, L'\\') : NULL;
+    if (ok)
+        _snwprintf(out, cap, L"%ls (process %lu)", name ? name + 1 : path, pid);
+    else
+        _snwprintf(out, cap, L"process %lu", pid);
+    out[cap - 1] = 0;
+    return 1;
 }
 
 static int wait_for(int up, int seconds)
@@ -391,6 +426,18 @@ static int http_wait(const char *method, const char *path, const char *body, cha
 static int http(const char *method, const char *path, const char *body, char *out, int cap)
 {
     return http_wait(method, path, body, out, cap, 3000);
+}
+
+/* What answers on the port is this app's own server (its /launcher API), not some other program. */
+static int ours(void)
+{
+    static char body[16384];
+    for (int i = 0; i < 3; i++) {               /* a server still starting may not answer yet */
+        if (http_wait("GET", "/launcher/api/state", NULL, body, sizeof body, 5000) == 200 && strstr(body, "\"play\""))
+            return 1;
+        Sleep(1000);
+    }
+    return 0;
 }
 
 /* A JSON string value: the text after "key":" up to its closing quote, unescaped simply. */
@@ -1895,6 +1942,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show)
 
     if (restart && !wait_for(0, 30))
         return 1;                              /* the old server never stopped: leave it be */
+    if (server_up() && !ours()) {
+        wchar_t who[MAX_PATH + 32], text[1024];
+        if (port_owner(who, MAX_PATH + 32))
+            _snwprintf(text, 1024, L"Another program is using port %d, which the server needs:\n\n    %ls\n\n"
+                       L"Close it (or end it in Task Manager), then open the app again.", PORT, who);
+        else
+            _snwprintf(text, 1024, L"Another program is using port %d, which the server needs.\n\nClose it, then open "
+                       L"the app again. To see which one, run in a command prompt:\n    netstat -ano | findstr :%d", PORT, PORT);
+        text[1023] = 0;
+        say(text);
+        return 1;
+    }
     if (!server_up()) {
         switch (start_server()) {
         case -1:

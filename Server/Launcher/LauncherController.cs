@@ -45,15 +45,15 @@ public sealed class LauncherController(Config config, LauncherService launcher, 
         {
             version = config.Server.Versions.FirstOrDefault() ?? "",
             game = new { running = LauncherService.GameRunning() },
-            play = new { mode, phase, message },
+            play = new { mode, phase, message, offline = launcher.Offline },
             join = new { host, tokenSet },
             hosting = new { address = launcher.HostingAddress, candidates = LauncherService.TailscaleAddresses() },
         };
     }
 
     [HttpPost("api/play")]
-    public IActionResult Play(PlayRequest req) =>
-        launcher.Play(req.Mode) is { } error ? Fail(error) : Ok();
+    public async Task<IActionResult> Play(PlayRequest req) =>
+        await launcher.PlayAsync(req.Mode) is { } error ? Fail(error) : Ok();
 
     [HttpPost("api/cancel")]
     public IActionResult Cancel()

@@ -30,6 +30,7 @@ public sealed partial class LauncherService(
     public string Mode { get; private set; } = "";
     public string Phase { get; private set; } = "idle";             // idle launching waiting attaching attached failed
     public string Message { get; private set; } = "";
+    public bool Offline => _offline is not null;
 
     /// <summary>The window is open: it asks for the state every second.</summary>
     public void Seen() => _lastSeen = DateTime.UtcNow;
@@ -47,31 +48,45 @@ public sealed partial class LauncherService(
 
     // ---------------------------------------------------------------- playing
 
-    /// <summary>Start Limbus (unless it is up) and attach the patch. Null when under way, else why not.</summary>
-    public string? Play(string mode)
+    /// <summary>
+    /// Start Limbus (unless it is up) and attach the patch. Null when under way, else why not.
+    /// A friend's server that doesn't answer, or doesn't take this game version, isn't a dead
+    /// end: you play offline on this computer's own server instead (your own save, not theirs).
+    /// </summary>
+    public async Task<string?> PlayAsync(string mode)
     {
         if (mode is not ("local" or "join"))
             return "Unknown way to play.";
         if (!OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("MYOSOTIS_NO_STEAM") != "1")
             return "Playing from this window is for the Windows package.";
-        var dir = config.ResolvePath(mode == "join" ? config.Launcher.JoinDir : config.Launcher.ClientDir);
-        var exe = Path.Combine(dir, "myoink.exe");
-        if (!File.Exists(exe) || !File.Exists(Path.Combine(dir, "myosotis.dll")))
-            return $"The patch is missing from {dir} - unzip the whole folder again.";
+        string? offline = null;
         if (mode == "join")
         {
             var (host, tokenSet) = ReadJoin();
             if (host.Length == 0 || !tokenSet)
                 return "Fill in your friend's address and your token first.";
+            if (Busy)
+                return null;                                     // already on its way: don't test again
+            offline = await OfflineReasonAsync(host);
+            if (offline is not null)
+            {
+                logger.LogInformation("Launcher: {Host} {Why} - playing offline", host, offline);
+                mode = "local";
+            }
         }
+        var dir = config.ResolvePath(mode == "join" ? config.Launcher.JoinDir : config.Launcher.ClientDir);
+        var exe = Path.Combine(dir, "myoink.exe");
+        if (!File.Exists(exe) || !File.Exists(Path.Combine(dir, "myosotis.dll")))
+            return $"The patch is missing from {dir} - unzip the whole folder again.";
 
         lock (_gate)
         {
             if (_inject is { HasExited: false })
                 return null;                                     // already on its way
             Mode = mode;
+            _offline = offline;
             Phase = "launching";
-            Message = "Starting Limbus through Steam";
+            Message = Note("Starting Limbus through Steam");
             if (!GameRunning() && Environment.GetEnvironmentVariable("MYOSOTIS_NO_STEAM") != "1")
             {
                 try
@@ -131,6 +146,7 @@ public sealed partial class LauncherService(
             _inject = null;
             Phase = "idle";
             Message = "";
+            _offline = null;
         }
     }
 
@@ -141,9 +157,9 @@ public sealed partial class LauncherService(
         lock (_gate)
         {
             if (line.Contains("waiting for window"))
-                (Phase, Message) = ("waiting", "Waiting for Limbus to open");
+                (Phase, Message) = ("waiting", Note("Waiting for Limbus to open"));
             else if (line.Contains("found window"))
-                (Phase, Message) = ("attaching", "Limbus is open - attaching the patch");
+                (Phase, Message) = ("attaching", Note("Limbus is open - attaching the patch"));
             else if (line.Contains("injected"))
                 (Phase, Message) = ("attached", Arrived());
         }
@@ -174,8 +190,26 @@ public sealed partial class LauncherService(
         logger.LogInformation("Launcher: patch tool exited {Code}", code);
     }
 
+    private string? _offline;                                        // why a friend's server was skipped
+
+    /// <summary>A step on the way in, saying so when it's offline because the friend's server isn't there.</summary>
+    private string Note(string step) =>
+        _offline is null ? step : $"Offline (your friend's server {_offline}): {step}";
+
     private string Arrived() =>
-        Mode == "join" ? "You're on your friend's server" : "You're on your own server";
+        Mode == "join" ? "You're on your friend's server"
+        : _offline is null ? "You're on your own server"
+        : $"Offline: your friend's server {_offline}, so you're on your own server";
+
+    /// <summary>Null when the friend's server answers and takes this game version, else why not (lowercase, mid-sentence).</summary>
+    private async Task<string?> OfflineReasonAsync(string host)
+    {
+        var (ok, versions, _) = await TestAsync(host);
+        if (!ok)
+            return "isn't answering";
+        var mine = config.Server.Versions.FirstOrDefault();
+        return mine is null || versions.Contains(mine) ? null : $"is for Limbus {string.Join(", ", versions)}, not {mine}";
+    }
 
     /// <summary>The phase as the window should show it: an attached run ends when Limbus closes.</summary>
     public (string Mode, string Phase, string Message) Now()
@@ -183,7 +217,7 @@ public sealed partial class LauncherService(
         lock (_gate)
         {
             if (Phase == "attached" && !GameRunning())
-                (Phase, Message) = ("idle", "");
+                (Phase, Message, _offline) = ("idle", "", null);
             return (Mode, Phase, Message);
         }
     }
