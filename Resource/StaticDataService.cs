@@ -1,0 +1,559 @@
+using System.Text.Json;
+using Common;
+using Microsoft.Extensions.Logging;
+using Types.Server;
+
+namespace Resource;
+
+public sealed class StaticDataService
+{
+    private static readonly JsonSerializerOptions JsonOptions =
+        new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
+
+    private readonly string _root;
+    private readonly ILogger<StaticDataService> _logger;
+
+    private IReadOnlyList<int> _personalityIds = [];
+    private IReadOnlySet<int> _personalitySet = new HashSet<int>();
+    private IReadOnlyList<int> _egoIds = [];
+    private IReadOnlyList<int> _itemIds = [];
+    private IReadOnlyList<int> _announcerIds = [];
+    private IReadOnlyList<int> _userBannerIds = [];
+    private IReadOnlyList<int> _borderRightIds = [];
+    private IReadOnlyList<int> _borderLeftIds = [];
+    private IReadOnlyList<int> _egoBgIds = [];
+    private IReadOnlyList<int> _unlockCodeIds = [];
+    private IReadOnlyList<int> _nodeIds = [];
+    private IReadOnlyList<(int Id, string ProductId)> _iapProducts = [];
+    private IReadOnlyList<int> _danteAbilityIds = [];
+    private Dictionary<int, IReadOnlyList<GachaEntry>> _gacha = [];
+    private Dictionary<int, int> _personalitySeasons = [];
+
+    public StaticDataService(string staticDataRoot, ILogger<StaticDataService> logger)
+    {
+        _root = staticDataRoot;
+        _logger = logger;
+    }
+
+    public IReadOnlyList<int> PersonalityIds => _personalityIds;
+    /// <summary>The same ids, for lookups.</summary>
+    public IReadOnlySet<int> KnownPersonalities => _personalitySet;
+    public IReadOnlyList<int> EgoIds => _egoIds;
+    public IReadOnlyList<int> ItemIds => _itemIds;
+    public IReadOnlyList<int> AnnouncerIds => _announcerIds;
+    public IReadOnlyList<int> UserBannerIds => _userBannerIds;
+    public IReadOnlyList<int> BorderRightIds => _borderRightIds;
+    public IReadOnlyList<int> BorderLeftIds => _borderLeftIds;
+    public IReadOnlyList<int> EgoBgIds => _egoBgIds;
+    public IReadOnlyList<int> UnlockCodeIds => _unlockCodeIds;
+    public IReadOnlyList<int> NodeIds => _nodeIds;
+    public IReadOnlyList<(int Id, string ProductId)> IapProducts => _iapProducts;
+    public IReadOnlyList<int> DanteAbilityIds => _danteAbilityIds;
+
+    /// <summary>
+    /// The Egoshard item an identity converts into when pulled as a duplicate.
+    ///
+    /// Shard ids share the identity's sinner prefix and end in the identity's season, so
+    /// Don Quixote's season-5 identity 10310 maps to item 10305,
+    /// "[Season 5] Don Quixote's Egoshard".
+    ///
+    /// Two wrinkles the raw season field has:
+    ///   season 0   base / season-1 identities (the LCB Sinners) - treated as season 1
+    ///   season 91xx  Walpurgisnacht and other limited identities - the real season is the
+    ///                low two digits, and some of those seasons have no shard of their own
+    ///
+    /// So the exact shard is tried first and, failing that, the highest shard that sinner has.
+    /// Every identity therefore pays out something. Returns 0 only if the sinner has no shard
+    /// item at all.
+    /// </summary>
+    public int EgoshardItemFor(int personalityId)
+    {
+        var prefix = personalityId / 100 * 100;
+
+        if (_personalitySeasons.TryGetValue(personalityId, out var season))
+        {
+            var normalised = season <= 0 ? 1 : season % 100;
+            var exact = prefix + normalised;
+            if (_itemIds.Contains(exact))
+                return exact;
+        }
+
+        // Fall back to that sinner's newest shard.
+        var best = 0;
+        for (var candidate = prefix + 1; candidate <= prefix + 99; candidate++)
+            if (_itemIds.Contains(candidate))
+                best = candidate;
+
+        return best;
+    }
+
+    /// <summary>EXP from level n to n+1 is PersonalityExpTable[n-1] (common-data personalityLevelTable).</summary>
+    public IReadOnlyList<int> PersonalityExpTable { get; private set; } = [];
+    /// <summary>The highest identity level the story can open (common-data maxlevelbystoryprogress).</summary>
+    public int PersonalityMaxLevel { get; private set; } = Common.SeedValues.PersonalityLevel;
+    /// <summary>Enkephalin one Enkephalin Module costs (common-data enkephalinForAModule).</summary>
+    public int EnkephalinForAModule { get; private set; } = 20;
+    /// <summary>How many items one use may spend at most (common-data maxNumberOfItemsOnceUsed).</summary>
+    public int MaxItemsOnceUsed { get; private set; } = 400;
+    /// <summary>Identity growth items: item id -> ("PERSONALITY_EXP" or "PERSONALITY_LEVEL_TO", value).</summary>
+    public IReadOnlyDictionary<int, (string Type, int Value)> PersonalityGrowthItems { get; private set; }
+        = new Dictionary<int, (string, int)>();
+
+    public IReadOnlyList<ChanceFormat> Chances { get; private set; } = [];
+    public BattlePassFormat? BattlePass { get; private set; }
+    public IReadOnlyList<MainChapterStateFormat> MainChapterStates { get; private set; } = [];
+    public IReadOnlyList<UnlockCodeFormat> UnlockCodes { get; private set; } = [];
+    public IReadOnlyList<MembershipFormat> Memberships { get; private set; } = [];
+
+    public IReadOnlyList<GachaEntry> GetGacha(int id) =>
+        _gacha.TryGetValue(id, out var entries) ? entries : [];
+
+    /// <summary>
+    /// The banner to actually roll for a requested id.
+    ///
+    /// The static data dump stops at gacha 288, but a live client asks for whatever banner is
+    /// current - 296 at the time of writing - and gets nothing, which is why the standard banner
+    /// did nothing when pulled. Unknown ids fall back to the newest banner we do have, so pulling
+    /// works with a slightly older pool rather than failing outright. Returns 0 if there are no
+    /// banners at all.
+    /// </summary>
+    public int ResolveGachaId(int requested)
+    {
+        if (_gacha.ContainsKey(requested))
+            return requested;
+
+        return _gacha.Count == 0 ? 0 : _gacha.Keys.Max();
+    }
+
+    public async Task LoadAllAsync()
+    {
+        _personalityIds = await LoadIdsAsync("personality");
+        _personalitySet = _personalityIds.ToHashSet();
+        _personalitySeasons = await LoadPersonalitySeasonsAsync();
+        _egoIds = await LoadIdsAsync("ego");
+        _itemIds = await LoadIdsAsync("item");
+        _announcerIds = await LoadIdsAsync("announcer");
+        _userBannerIds = await LoadIdsAsync("userbanner");
+        _borderRightIds = await LoadTicketIdsAsync("userticket-r");
+        _borderLeftIds = await LoadTicketIdsAsync("userticket-l");
+        _egoBgIds = await LoadTicketIdsAsync("userticket-egobg");
+        _unlockCodeIds = await LoadUnlockCodeIdsAsync();
+        _nodeIds = await LoadNodeIdsAsync();
+        _iapProducts = await LoadIapProductsAsync();
+        _danteAbilityIds = await LoadDanteAbilityIdsAsync();
+
+        await LoadGrowthRulesAsync();
+        Chances = await LoadChancesAsync();
+        BattlePass = await LoadBattlePassAsync();
+        UnlockCodes = _unlockCodeIds.Select(id => new UnlockCodeFormat { unlockcode = id }).ToList();
+        MainChapterStates = BuildMainChapterStates(_unlockCodeIds);
+        Memberships = BuildMemberships(_iapProducts);
+        _gacha = await LoadGachaAsync();
+
+        _logger.LogInformation(
+            "StaticData loaded: {Personalities} personalities, {Egos} egos, {Items} items, {Announcers} announcers, {Banners} banners, {UnlockCodes} unlock codes, {Chances} chances, {Gachas} gacha files",
+            _personalityIds.Count, _egoIds.Count, _itemIds.Count, _announcerIds.Count,
+            _userBannerIds.Count, _unlockCodeIds.Count, Chances.Count, _gacha.Count);
+    }
+
+    /// <summary>
+    /// The identity EXP curve, the level cap, the module price and which items grow an identity -
+    /// all read from the game's own data so the server levels identities exactly as the client
+    /// draws them. A missing or unreadable file keeps the defaults (and EXP items then do nothing).
+    /// </summary>
+    private async Task LoadGrowthRulesAsync()
+    {
+        foreach (var path in EnumerateJson("common-data").OrderByDescending(p => p, StringComparer.Ordinal))
+        {
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                using var doc = await JsonDocument.ParseAsync(stream);
+                var r = doc.RootElement;
+                if (r.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array && list.GetArrayLength() > 0)
+                    r = list[0];
+                if (!r.TryGetProperty("personalityLevelTable", out var plt)
+                    || !plt.TryGetProperty("expTable", out var et) || et.ValueKind != JsonValueKind.Array)
+                    continue;
+                PersonalityExpTable = et.EnumerateArray().Select(e => e.GetInt32()).ToList();
+                if (r.TryGetProperty("maxlevelbystoryprogress", out var ml) && ml.ValueKind == JsonValueKind.Array)
+                {
+                    var caps = ml.EnumerateArray().Where(x => x.TryGetProperty("maxlevel", out _))
+                        .Select(x => x.GetProperty("maxlevel").GetInt32()).ToList();
+                    if (caps.Count > 0)
+                        PersonalityMaxLevel = Math.Min(caps.Max(), PersonalityExpTable.Count + 1);
+                }
+                if (r.TryGetProperty("enkephalinForAModule", out var em) && em.TryGetInt32(out var e1) && e1 > 0)
+                    EnkephalinForAModule = e1;
+                if (r.TryGetProperty("maxNumberOfItemsOnceUsed", out var mi) && mi.TryGetInt32(out var m1) && m1 > 0)
+                    MaxItemsOnceUsed = m1;
+                break;
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or FormatException)
+            {
+                _logger.LogWarning(ex, "Couldn't read growth rules from {Path}", path);
+            }
+        }
+
+        var growth = new Dictionary<int, (string, int)>();
+        foreach (var path in EnumerateJson("item"))
+        {
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                using var doc = await JsonDocument.ParseAsync(stream);
+                if (!doc.RootElement.TryGetProperty("list", out var items) || items.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var item in items.EnumerateArray())
+                {
+                    if (!item.TryGetProperty("id", out var idEl) || !item.TryGetProperty("itemUseFuncs", out var funcs)
+                        || funcs.ValueKind != JsonValueKind.Array || funcs.GetArrayLength() != 1)
+                        continue;                       // the plain tickets have exactly one effect
+                    var f = funcs[0];
+                    var type = f.TryGetProperty("itemUseFuncType", out var ty) ? ty.GetString() : null;
+                    if (type is "PERSONALITY_EXP" or "PERSONALITY_LEVEL_TO"
+                        && f.TryGetProperty("itemUseFuncValue", out var v) && v.TryGetInt32(out var value))
+                        growth[idEl.GetInt32()] = (type, value);
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or FormatException)
+            {
+                _logger.LogWarning(ex, "Couldn't read item uses from {Path}", path);
+            }
+        }
+        PersonalityGrowthItems = growth;
+        _logger.LogInformation(
+            "Identity growth: {Levels}-step EXP table, cap level {Cap}, {Items} EXP/level items, a module costs {Cost} Enkephalin",
+            PersonalityExpTable.Count, PersonalityMaxLevel, growth.Count, EnkephalinForAModule);
+    }
+
+    private async Task<Dictionary<int, int>> LoadPersonalitySeasonsAsync()
+    {
+        var seasons = new Dictionary<int, int>();
+        foreach (var file in EnumerateJson("personality"))
+        {
+            var data = await DeserializeAsync<SeasonListFile>(file);
+            foreach (var item in data?.list ?? [])
+                seasons[item.id] = item.season;
+        }
+
+        return seasons;
+    }
+
+    private async Task<IReadOnlyList<int>> LoadIdsAsync(string folder)
+    {
+        var ids = new HashSet<int>();
+        foreach (var file in EnumerateJson(folder))
+        {
+            var data = await DeserializeAsync<IdListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list)
+                ids.Add(item.id);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private async Task<IReadOnlyList<int>> LoadTicketIdsAsync(string folder)
+    {
+        var ids = new HashSet<int>();
+        foreach (var file in EnumerateJson(folder))
+        {
+            var data = await DeserializeAsync<IdListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list.Where(i => i.id > 7))
+                ids.Add(item.id);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private async Task<IReadOnlyList<int>> LoadUnlockCodeIdsAsync()
+    {
+        var ids = new HashSet<int>();
+        foreach (var file in EnumerateJson("unlockcode"))
+        {
+            if (file.Contains("event", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var data = await DeserializeAsync<IdListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list.Where(i => i.id != 107))
+                ids.Add(item.id);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private async Task<IReadOnlyList<int>> LoadNodeIdsAsync()
+    {
+        var ids = new HashSet<int>();
+        foreach (var file in EnumerateJson("stagenodereward"))
+        {
+            var data = await DeserializeAsync<NodeListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list)
+                ids.Add(item.nodeid);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private async Task<IReadOnlyList<ChanceFormat>> LoadChancesAsync()
+    {
+        var seen = new HashSet<int>();
+        var chances = new List<ChanceFormat>();
+        foreach (var file in EnumerateJson("chance"))
+        {
+            if (Path.GetFileNameWithoutExtension(file).Contains("gacha", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var data = await DeserializeAsync<ChanceListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list.Where(c => seen.Add(c.id)))
+                chances.Add(new ChanceFormat { id = item.id, value = item.max });
+        }
+
+        return chances;
+    }
+
+    private async Task<BattlePassFormat?> LoadBattlePassAsync()
+    {
+        var files = EnumerateJson("battlepass").ToList();
+        BattlePassItem? item = null;
+        foreach (var file in files)
+        {
+            var data = await DeserializeAsync<BattlePassListFile>(file);
+            var current = data?.list.FirstOrDefault(x => x.isCurrentForUI);
+            if (current is not null)
+            {
+                item = current;
+                break;
+            }
+        }
+
+        if (item is null)
+        {
+            foreach (var file in files)
+            {
+                var parts = Path.GetFileNameWithoutExtension(file).Split('-');
+                if (parts.Length < 2 || parts[1] != SeedValues.BattlePassSeason)
+                    continue;
+
+                var data = await DeserializeAsync<BattlePassListFile>(file);
+                item = data?.list.FirstOrDefault();
+                if (item is not null)
+                    break;
+            }
+        }
+
+        if (item is not null)
+        {
+            var missions = item.passMissionsInfo.missionList
+                .Select(m => new BattlePassMissionState
+                {
+                    id = m.missionId,
+                    count = m.countMax,
+                    state = MISSION_STATE.OPENED,
+                })
+                .ToList();
+
+            return new BattlePassFormat
+            {
+                is_limbus = true,
+                level = SeedValues.BattlePassLevel,
+                exp = SeedValues.BattlePassExp,
+                today_rand_value = SeedValues.BattlePassTodayRandValue,
+                ex_reward_level = SeedValues.BattlePassExRewardLevel,
+                ex_reward_limbus_level = SeedValues.BattlePassExRewardLimbusLevel,
+                limbus_apply_level = SeedValues.BattlePassLimbusApplyLevel,
+                special_product_state = SeedValues.BattlePassSpecialProductState,
+                rewards_state = Enumerable.Repeat(SeedValues.BattlePassRewardStateWithLimbus, item.passRewardsInfo.maxLevel).ToList(),
+                missions_state = missions,
+            };
+        }
+
+        _logger.LogWarning(
+            "battlepass static data not found (no isCurrentForUI entry, season {Season} filename missing); BattlePass defaults to empty.",
+            SeedValues.BattlePassSeason);
+        return null;
+    }
+
+    private static IReadOnlyList<MainChapterStateFormat> BuildMainChapterStates(IReadOnlyList<int> unlockCodeIds)
+    {
+        var mainChapters = new List<MainChapterStateFormat>();
+        foreach (var chapter in new[] { 1, 91 })
+        {
+            var subChapters = new List<SubChapterStateFormat>();
+            foreach (var code in unlockCodeIds.Where(code => code / 100 == chapter).OrderBy(code => code))
+            {
+                var nodes = new List<NodeStateFormat>();
+                for (int sub = 1; sub <= 99; sub++)
+                    nodes.Add(new NodeStateFormat { id = code * 100 + sub, ct = 2, cn = 1, dn = 0 });
+
+                subChapters.Add(new SubChapterStateFormat { id = code, nss = nodes, rss = [1, 2, 3, 10] });
+            }
+
+            mainChapters.Add(new MainChapterStateFormat { id = chapter, subcss = subChapters });
+        }
+
+        return mainChapters;
+    }
+
+    private async Task<IReadOnlyList<(int Id, string ProductId)>> LoadIapProductsAsync()
+    {
+        var products = new List<(int Id, string ProductId)>();
+        foreach (var file in EnumerateJson("iap-product"))
+        {
+            if (Path.GetFileNameWithoutExtension(file).Contains("a1", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var data = await DeserializeAsync<IapProductListFile>(file);
+            if (data is null)
+                continue;
+            products.AddRange(data.list.Select(i => (i.id, i.productId)));
+        }
+
+        return products;
+    }
+
+    private static IReadOnlyList<MembershipFormat> BuildMemberships(IReadOnlyList<(int Id, string ProductId)> products)
+    {
+        return products
+            .Where(p => p.ProductId.Length > 0)
+            .Where(p =>
+            {
+                var lower = p.ProductId.ToLowerInvariant();
+                return (lower.Contains("monthly") || lower.Contains("pass")) && !lower.Contains("fixed");
+            })
+            .Select(p => new MembershipFormat { iap_id = p.Id, expiry_date = "2098-11-09T22:10:00.864Z" })
+            .ToList();
+    }
+
+    private async Task<IReadOnlyList<int>> LoadDanteAbilityIdsAsync()
+    {
+        var ids = new HashSet<int>();
+        foreach (var file in EnumerateJson("dante-ability"))
+        {
+            var data = await DeserializeAsync<IdListFile>(file);
+            if (data is null)
+                continue;
+            foreach (var item in data.list)
+                ids.Add(item.id);
+        }
+
+        return ids.OrderBy(id => id).ToList();
+    }
+
+    private async Task<Dictionary<int, IReadOnlyList<GachaEntry>>> LoadGachaAsync()
+    {
+        var result = new Dictionary<int, IReadOnlyList<GachaEntry>>();
+        foreach (var file in EnumerateJson("gacha"))
+        {
+            var parts = Path.GetFileNameWithoutExtension(file).Split('-');
+            if (parts.Length < 2 || !int.TryParse(parts[1], out var id))
+                continue;
+
+            var data = await DeserializeAsync<GachaListFile>(file);
+            if (data is null)
+                continue;
+
+            result[id] = data.list.Select(g => new GachaEntry(
+                g.payments.Select(p => new GachaPayment(p.paymentId, p.count, p.requiredItemId, p.requiredNum)).ToList(),
+                g.contents.Select(c => new GachaContent(c.groupType, c.elementType, c.elementIdList,
+                    c.occupancyCaseList.ToDictionary(o => o.occupancyCase, o => o.occupancy))).ToList()))
+                .ToList();
+        }
+
+        return result;
+    }
+
+    private IReadOnlyList<string> EnumerateJson(string folder)
+    {
+        var full = Path.Combine(_root, folder);
+        if (!Directory.Exists(full))
+        {
+            _logger.LogWarning("Static data folder missing: {Folder}", full);
+            return [];
+        }
+
+        return Directory.EnumerateFiles(full, "*.json", SearchOption.AllDirectories).ToList();
+    }
+
+    private async Task<T?> DeserializeAsync<T>(string path) where T : class
+    {
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse static file {Path}", path);
+            return null;
+        }
+    }
+
+    private sealed class IdListFile { public List<IdItem> list { get; set; } = []; }
+    private sealed class IdItem { public int id { get; set; } }
+    private sealed class NodeListFile { public List<NodeItem> list { get; set; } = []; }
+    private sealed class NodeItem { public int nodeid { get; set; } }
+    private sealed class ChanceListFile { public List<ChanceItem> list { get; set; } = []; }
+    private sealed class ChanceItem { public int id { get; set; } public int max { get; set; } }
+    private sealed class BattlePassListFile { public List<BattlePassItem> list { get; set; } = []; }
+    private sealed class BattlePassItem
+    {
+        public int id { get; set; }
+        public bool isCurrentForUI { get; set; }
+        public PassRewardsInfo passRewardsInfo { get; set; } = new();
+        public PassMissionsInfo passMissionsInfo { get; set; } = new();
+    }
+    private sealed class PassRewardsInfo { public int maxLevel { get; set; } }
+    private sealed class PassMissionsInfo { public List<PassMission> missionList { get; set; } = []; }
+    private sealed class PassMission { public int missionId { get; set; } public int countMax { get; set; } }
+    private sealed class IapProductListFile { public List<IapProductItem> list { get; set; } = []; }
+    private sealed class IapProductItem { public int id { get; set; } public string productId { get; set; } = ""; }
+    private sealed class SeasonListFile { public List<SeasonItem> list { get; set; } = []; }
+    private sealed class SeasonItem { public int id { get; set; } public int season { get; set; } }
+    private sealed class GachaListFile { public List<GachaItem> list { get; set; } = []; }
+    private sealed class GachaItem
+    {
+        public List<GachaPaymentItem> payments { get; set; } = [];
+        public List<GachaContentItem> contents { get; set; } = [];
+    }
+    private sealed class GachaPaymentItem
+    {
+        public int paymentId { get; set; }
+        public int count { get; set; }
+        public int requiredItemId { get; set; }
+        public int requiredNum { get; set; }
+    }
+    private sealed class GachaContentItem
+    {
+        public string groupType { get; set; } = "";
+        public string elementType { get; set; } = "";
+        public List<int> elementIdList { get; set; } = [];
+        public List<GachaOccupancyItem> occupancyCaseList { get; set; } = [];
+    }
+    private sealed class GachaOccupancyItem
+    {
+        public string occupancyCase { get; set; } = "";
+        public int occupancy { get; set; }
+    }
+}
+
+public sealed record GachaEntry(
+    IReadOnlyList<GachaPayment> Payments,
+    IReadOnlyList<GachaContent> Contents);
+
+public sealed record GachaPayment(int PaymentId, int Count, int RequiredItemId, int RequiredNum);
+
+/// <param name="Occupancy">
+/// Weight per draw case, out of 10000 summed over a banner's groups: DEFAULT, TENTH (the
+/// guaranteed slot of a ten-pull), and COMPLETE_EGO_* (used once every banner E.G.O. is owned).
+/// </param>
+public sealed record GachaContent(
+    string GroupType, string ElementType, IReadOnlyList<int> ElementIdList,
+    IReadOnlyDictionary<string, int> Occupancy);
